@@ -6,14 +6,14 @@ import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from
 import type { ModalState } from "@/App";
 
 const CATEGORY_META: Record<string, { emoji: string }> = {
-  "Cleaning":      { emoji: "🧹" },
-  "Garden":        { emoji: "🌿" },
-  "Laundry":       { emoji: "👕" },
-  "Plumbing":      { emoji: "🔧" },
-  "Painting":      { emoji: "🖌️" },
-  "Grass cutting": { emoji: "✂️" },
-  "Dishwashing":   { emoji: "🍽️" },
-  "Moving":        { emoji: "📦" },
+  "Cleaning":      { emoji: "\u{1F9F9}" },   // 🧹
+  "Garden":        { emoji: "\u{1F33F}" },   // 🌿
+  "Laundry":       { emoji: "\u{1F455}" },   // 👕
+  "Plumbing":      { emoji: "\u{1F527}" },   // 🔧
+  "Painting":      { emoji: "\u{1F58C}\uFE0F" }, // 🖌️
+  "Grass cutting": { emoji: "\u2702\uFE0F" }, // ✂️
+  "Dishwashing":   { emoji: "\u{1F37D}\uFE0F" }, // 🍽️
+  "Moving":        { emoji: "\u{1F4E6}" },   // 📦
 };
 
 const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
@@ -28,6 +28,7 @@ function timeAgo(dateStr: string) {
 
 export default function Landing({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const [liveJobs, setLiveJobs] = useState<Job[]>([]);
+  const [jobsLoaded, setJobsLoaded] = useState(false);
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLocation] = useLocation();
@@ -35,23 +36,29 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
 
   useEffect(() => {
     async function fetchData() {
-      const { data: jobs } = await supabase
-        .from("jobs")
-        .select("*")
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .limit(4);
-      if (jobs) {
-        setLiveJobs(jobs);
-        const counts: Record<string, number> = {};
-        jobs.forEach((j: Job) => { counts[j.category] = (counts[j.category] || 0) + 1; });
-        // Fetch all for counts
-        const { data: allJobs } = await supabase.from("jobs").select("category").eq("status", "open");
-        if (allJobs) {
-          const allCounts: Record<string, number> = {};
-          allJobs.forEach((j: { category: string }) => { allCounts[j.category] = (allCounts[j.category] || 0) + 1; });
-          setJobCounts(allCounts);
-        }
+      // Fetch preview jobs (top 4) and all job counts in parallel
+      const [previewRes, countsRes] = await Promise.all([
+        supabase
+          .from("jobs")
+          .select("*")
+          .eq("status", "open")
+          .order("created_at", { ascending: false })
+          .limit(4),
+        supabase
+          .from("jobs")
+          .select("category")
+          .eq("status", "open"),
+      ]);
+
+      setLiveJobs(previewRes.data ?? []);
+      setJobsLoaded(true);
+
+      if (countsRes.data) {
+        const allCounts: Record<string, number> = {};
+        countsRes.data.forEach((j: { category: string }) => {
+          allCounts[j.category] = (allCounts[j.category] || 0) + 1;
+        });
+        setJobCounts(allCounts);
       }
     }
     fetchData();
@@ -157,7 +164,8 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
                   </Link>
                 </div>
                 <div className="divide-y divide-border">
-                  {liveJobs.length === 0 ? (
+                  {!jobsLoaded ? (
+                    // Skeleton — only while the first fetch is in-flight
                     [...Array(3)].map((_, i) => (
                       <div key={i} className="px-5 py-4 flex items-center gap-3 animate-pulse">
                         <div className="w-10 h-10 rounded-xl bg-muted shrink-0" />
@@ -168,11 +176,19 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
                         <div className="h-4 bg-muted rounded w-10" />
                       </div>
                     ))
+                  ) : liveJobs.length === 0 ? (
+                    // Fetch completed but table is empty (or tables not yet created)
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-2xl mb-2">📋</p>
+                      <p className="text-sm font-medium text-foreground">No open jobs yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">Be the first to post one!</p>
+                    </div>
                   ) : (
+                    // Real data
                     liveJobs.map(job => (
                       <div key={job.id} className="px-5 py-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                         <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center text-xl shrink-0">
-                          {CATEGORY_META[job.category]?.emoji ?? "📋"}
+                          {CATEGORY_META[job.category]?.emoji ?? "\u{1F4CB}"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-foreground text-sm truncate">{job.title}</p>
