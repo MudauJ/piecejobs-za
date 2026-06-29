@@ -29,7 +29,7 @@ function Router({ modalState, setModalState }: { modalState: ModalState, setModa
         <Switch>
           <Route path="/" component={() => <Landing setModalState={setModalState} />} />
           <Route path="/jobs" component={() => <Jobs setModalState={setModalState} />} />
-          <Route path="/workers" component={Workers} />
+          <Route path="/workers" component={() => <Workers setModalState={setModalState} />} />
           <Route component={NotFound} />
         </Switch>
       </main>
