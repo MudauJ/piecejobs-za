@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { supabase, type Job } from "@/lib/supabase";
-import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight } from "lucide-react";
+import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from "lucide-react";
 import type { ModalState } from "@/App";
 
 const CATEGORY_META: Record<string, { emoji: string }> = {
@@ -18,142 +18,244 @@ const CATEGORY_META: Record<string, { emoji: string }> = {
 
 const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
 
-const SAMPLE_JOBS = [
-  { emoji: "🌿", title: "Full garden cleanup", suburb: "Sandton, JHB", budget: 450, urgent: true },
-  { emoji: "🧹", title: "3-bedroom deep clean", suburb: "Umhlanga, DBN", budget: 650, urgent: true },
-  { emoji: "🔧", title: "Fix leaking kitchen tap", suburb: "Hatfield, PTA", budget: 400, urgent: false },
-  { emoji: "📦", title: "Help moving furniture", suburb: "Morningside, DBN", budget: 500, urgent: false },
-];
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 export default function Landing({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
+  const [liveJobs, setLiveJobs] = useState<Job[]>([]);
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [, setLocation] = useLocation();
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    async function fetchCounts() {
-      const { data } = await supabase.from("jobs").select("category").eq("status", "open");
-      if (data) {
+    async function fetchData() {
+      const { data: jobs } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(4);
+      if (jobs) {
+        setLiveJobs(jobs);
         const counts: Record<string, number> = {};
-        data.forEach(j => { counts[j.category] = (counts[j.category] || 0) + 1; });
-        setJobCounts(counts);
+        jobs.forEach((j: Job) => { counts[j.category] = (counts[j.category] || 0) + 1; });
+        // Fetch all for counts
+        const { data: allJobs } = await supabase.from("jobs").select("category").eq("status", "open");
+        if (allJobs) {
+          const allCounts: Record<string, number> = {};
+          allJobs.forEach((j: { category: string }) => { allCounts[j.category] = (allCounts[j.category] || 0) + 1; });
+          setJobCounts(allCounts);
+        }
       }
     }
-    fetchCounts();
+    fetchData();
   }, []);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setLocation(`/jobs?q=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      setLocation("/jobs");
+    }
+  }
+
+  const totalJobs = Object.values(jobCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="w-full">
-      {/* ── Hero ── */}
-      <section
-        className="relative overflow-hidden text-white"
-        style={{ background: "linear-gradient(135deg, #1B2E4B 0%, #243d60 60%, #1e3555 100%)" }}
-      >
-        <div className="absolute inset-0 opacity-5 pointer-events-none"
-          style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #2D7DD2 0%, transparent 60%), radial-gradient(circle at 80% 20%, #F5A623 0%, transparent 50%)" }}
-        />
-        <div className="container mx-auto px-6 py-20 lg:py-28 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left column */}
-            <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5 text-sm font-medium text-white/90">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                {Object.values(jobCounts).reduce((a, b) => a + b, 0) || "8"} jobs open right now
+
+      {/* ── HERO ── */}
+      <section style={{ background: "linear-gradient(160deg, #FFFFFF 0%, #F7F9FC 100%)" }} className="pt-16 pb-0 border-b border-border">
+        <div className="container mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-10 items-start">
+
+            {/* Left: headline + search + category pills */}
+            <div className="pb-16 pt-4 space-y-8">
+
+              {totalJobs > 0 && (
+                <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary bg-primary/8 border border-primary/15 rounded-full px-4 py-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  {totalJobs} jobs open right now
+                </div>
+              )}
+
+              <div>
+                <h1 className="font-serif text-5xl lg:text-6xl font-extrabold leading-[1.08] tracking-tight" style={{ color: "#1B2E4B" }}>
+                  Find{" "}
+                  <span className="relative inline-block">
+                    trusted
+                    <span
+                      className="absolute left-0 -bottom-1 w-full h-[4px] rounded-full"
+                      style={{ background: "#F5A623" }}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  {" "}help<br />for any home job
+                </h1>
+                <p className="mt-6 text-lg leading-relaxed" style={{ color: "#64748b" }}>
+                  Connect with verified local workers in your suburb for cleaning, gardening, plumbing, ironing and more.
+                </p>
               </div>
-              <h1 className="font-serif text-5xl md:text-6xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.1]">
-                Local work,<br />done by{" "}
-                <span style={{ color: "#F5A623" }}>local people</span>.
-              </h1>
-              <p className="text-lg text-white/75 leading-relaxed max-w-lg">
-                The trusted community notice board for South African household piece jobs. Find a reliable worker today, or earn money helping your neighbours.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button
-                  size="lg"
-                  className="font-bold text-base h-13 px-8 shadow-lg"
-                  style={{ background: "#F5A623", color: "#1B2E4B" }}
-                  onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
-                  data-testid="button-hero-post-job"
+
+              {/* Search bar */}
+              <form onSubmit={handleSearch} className="relative flex items-center w-full">
+                <Search className="absolute left-5 h-5 w-5 text-muted-foreground pointer-events-none shrink-0" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="What do you need help with? e.g. garden, cleaning, plumbing..."
+                  data-testid="input-hero-search"
+                  className="w-full pl-13 pr-40 py-4 rounded-full border-2 border-border bg-white text-foreground placeholder:text-muted-foreground text-base shadow-sm focus:outline-none focus:border-primary transition-colors"
+                  style={{ paddingLeft: "3.25rem" }}
+                />
+                <button
+                  type="submit"
+                  data-testid="button-hero-search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-6 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
+                  style={{ background: "#2D7DD2" }}
                 >
-                  Post a Job
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="font-semibold text-base h-13 px-8 bg-transparent border-white/25 text-white hover:bg-white/10"
-                  onClick={() => setModalState(prev => ({ ...prev, workerReg: true }))}
-                  data-testid="button-hero-join-worker"
-                >
-                  Offer Your Skills
-                </Button>
+                  Search
+                </button>
+              </form>
+
+              {/* Category quick-links */}
+              <div className="flex flex-wrap gap-2">
+                {DISPLAY_CATEGORIES.map(cat => (
+                  <Link
+                    key={cat}
+                    href={`/jobs?category=${encodeURIComponent(cat)}`}
+                    data-testid={`pill-cat-${cat}`}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border border-border bg-white text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-all cursor-pointer"
+                  >
+                    <span>{CATEGORY_META[cat].emoji}</span>
+                    {cat}
+                  </Link>
+                ))}
               </div>
-              <div className="flex items-center gap-6 text-sm text-white/60 pt-2">
-                <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-green-400" /> ID Verified Workers</span>
-                <span className="flex items-center gap-1.5"><Star className="h-4 w-4 text-amber-400" /> Community Rated</span>
-              </div>
+
             </div>
 
-            {/* Right column — live job preview */}
-            <div className="hidden lg:block">
-              <div className="bg-white/8 backdrop-blur-sm border border-white/15 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-semibold text-white/80 uppercase tracking-wider">Latest Jobs</span>
-                  <Link href="/jobs" className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors">
+            {/* Right: floating live-jobs card */}
+            <div className="hidden lg:flex items-end justify-center pb-0 pt-6">
+              <div className="w-full max-w-sm bg-white rounded-t-2xl shadow-xl border border-border overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                  <div>
+                    <p className="font-serif font-bold text-foreground">Live jobs near you</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Updated in real time</p>
+                  </div>
+                  <Link href="/jobs" className="text-xs font-semibold text-primary hover:underline flex items-center gap-0.5">
                     View all <ArrowRight className="h-3 w-3" />
                   </Link>
                 </div>
-                {SAMPLE_JOBS.map((job, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 bg-white/8 hover:bg-white/12 rounded-xl px-4 py-3 transition-colors cursor-pointer"
-                    onClick={() => setModalState(prev => ({ ...prev, postJob: false }))}
+                <div className="divide-y divide-border">
+                  {liveJobs.length === 0 ? (
+                    [...Array(3)].map((_, i) => (
+                      <div key={i} className="px-5 py-4 flex items-center gap-3 animate-pulse">
+                        <div className="w-10 h-10 rounded-xl bg-muted shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-muted rounded w-3/4" />
+                          <div className="h-2.5 bg-muted rounded w-1/2" />
+                        </div>
+                        <div className="h-4 bg-muted rounded w-10" />
+                      </div>
+                    ))
+                  ) : (
+                    liveJobs.map(job => (
+                      <div key={job.id} className="px-5 py-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center text-xl shrink-0">
+                          {CATEGORY_META[job.category]?.emoji ?? "📋"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground text-sm truncate">{job.title}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {job.suburb}, {job.city}
+                            <span className="mx-1">·</span>
+                            {timeAgo(job.created_at)}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 space-y-1">
+                          <p className="font-bold text-sm" style={{ color: "#F5A623" }}>R{job.budget}</p>
+                          {job.is_urgent && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 rounded px-1.5 py-0.5">
+                              <Flame className="h-2.5 w-2.5" />Urgent
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="px-5 py-3 bg-muted/30 border-t border-border">
+                  <Button
+                    onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
+                    className="w-full h-9 text-sm font-bold text-white"
+                    style={{ background: "#F5A623", color: "#1B2E4B" }}
+                    data-testid="button-card-post-job"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0">
-                      {job.emoji}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-sm truncate">{job.title}</p>
-                      <p className="text-white/55 text-xs flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3" />{job.suburb}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-amber-400 text-sm">R{job.budget}</p>
-                      {job.urgent && (
-                        <span className="text-xs bg-red-500/20 text-red-300 rounded px-1.5 py-0.5">Urgent</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <Link href="/jobs">
-                  <Button className="w-full mt-2 bg-white/10 hover:bg-white/20 text-white border-0 font-semibold text-sm h-10">
-                    Browse all jobs →
+                    + Post your job
                   </Button>
-                </Link>
+                </div>
               </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ── Trust badges ── */}
+      <section className="bg-white border-b border-border py-5">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+            <div className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+              <span className="text-xl">🪪</span>
+              <span>ID Verified Workers</span>
+            </div>
+            <div className="hidden sm:block w-px h-5 bg-border" />
+            <div className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+              <span className="text-xl">⭐</span>
+              <span>Community Rated</span>
+            </div>
+            <div className="hidden sm:block w-px h-5 bg-border" />
+            <div className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+              <span className="text-xl">💳</span>
+              <span>Pay Workers Directly</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── Categories ── */}
-      <section className="py-24 bg-background">
+      <section className="py-20 bg-white">
         <div className="container mx-auto px-6">
-          <div className="text-center mb-14">
-            <h2 className="font-serif text-4xl font-bold text-foreground mb-3">What do you need help with?</h2>
+          <div className="text-center mb-12">
+            <h2 className="font-serif text-4xl font-bold mb-3" style={{ color: "#1B2E4B" }}>What do you need help with?</h2>
             <p className="text-muted-foreground text-lg">Click a category to browse matching jobs in your area.</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
             {DISPLAY_CATEGORIES.map((cat) => {
-              const meta = CATEGORY_META[cat];
               const count = jobCounts[cat] || 0;
               return (
                 <Link
                   key={cat}
                   href={`/jobs?category=${encodeURIComponent(cat)}`}
                   data-testid={`card-category-${cat}`}
-                  className="bg-white border-t-4 border-t-transparent border border-border rounded-2xl p-5 flex flex-col items-center gap-3 cursor-pointer group transition-all duration-200 hover:border-t-primary hover:shadow-lg hover:-translate-y-0.5 text-center"
+                  className="bg-white border border-border rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer group transition-all duration-200 hover:border-t-primary hover:shadow-lg hover:-translate-y-0.5 text-center"
+                  style={{ borderTopWidth: "3px", borderTopColor: "transparent" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderTopColor = "#2D7DD2")}
+                  onMouseLeave={e => (e.currentTarget.style.borderTopColor = "transparent")}
                 >
-                  <span className="text-4xl">{meta.emoji}</span>
-                  <span className="font-bold text-foreground group-hover:text-primary transition-colors text-sm leading-tight">{cat}</span>
+                  <span className="text-4xl">{CATEGORY_META[cat].emoji}</span>
+                  <span className="font-bold text-sm leading-tight group-hover:text-primary transition-colors" style={{ color: "#1B2E4B" }}>{cat}</span>
                   <span className="text-xs text-muted-foreground font-medium">
                     {count > 0 ? `${count} job${count !== 1 ? "s" : ""}` : "Post first"}
                   </span>
@@ -165,7 +267,7 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
       </section>
 
       {/* ── How It Works ── */}
-      <section className="py-24 bg-white">
+      <section className="py-24 bg-background">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="font-serif text-4xl font-bold text-foreground mb-3">How PieceJobs Works</h2>
@@ -217,31 +319,24 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
             </h2>
             <p className="text-white/60 text-lg">Safety and community are at the heart of everything we do.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            <div className="flex flex-col items-center gap-5 text-center p-8 rounded-2xl bg-white/5 border border-white/10">
-              <ShieldCheck className="w-14 h-14 text-white" strokeWidth={1.5} />
-              <div>
-                <h3 className="font-serif text-xl font-bold mb-2">SA ID Verification</h3>
-                <p className="text-white/55 text-sm leading-relaxed">All worker profiles require a valid South African ID number for community safety.</p>
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {[
+              { Icon: ShieldCheck, title: "SA ID Verification", desc: "All worker profiles require a valid South African ID number for community safety." },
+              { Icon: Star, title: "Community Ratings", desc: "Read real reviews from homeowners in your area before you hire anyone." },
+              { Icon: CreditCard, title: "Direct Payments", desc: "No platform fees. You pay the worker directly when the job is done." },
+            ].map(({ Icon, title, desc }) => (
+              <div key={title} className="flex flex-col items-center gap-5 text-center p-8 rounded-2xl bg-white/5 border border-white/10">
+                <Icon className="w-14 h-14 text-white" strokeWidth={1.5} />
+                <div>
+                  <h3 className="font-serif text-xl font-bold mb-2">{title}</h3>
+                  <p className="text-white/55 text-sm leading-relaxed">{desc}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col items-center gap-5 text-center p-8 rounded-2xl bg-white/5 border border-white/10">
-              <Star className="w-14 h-14 text-white" strokeWidth={1.5} />
-              <div>
-                <h3 className="font-serif text-xl font-bold mb-2">Community Ratings</h3>
-                <p className="text-white/55 text-sm leading-relaxed">Read real reviews from homeowners in your area before you hire anyone.</p>
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-5 text-center p-8 rounded-2xl bg-white/5 border border-white/10">
-              <CreditCard className="w-14 h-14 text-white" strokeWidth={1.5} />
-              <div>
-                <h3 className="font-serif text-xl font-bold mb-2">Direct Payments</h3>
-                <p className="text-white/55 text-sm leading-relaxed">No platform fees. You pay the worker directly when the job is done to your satisfaction.</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
+
     </div>
   );
 }
