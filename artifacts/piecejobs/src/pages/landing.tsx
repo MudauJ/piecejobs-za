@@ -6,14 +6,14 @@ import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from
 import type { ModalState } from "@/App";
 
 const CATEGORY_META: Record<string, { emoji: string }> = {
-  "Cleaning":      { emoji: "\u{1F9F9}" },   // 🧹
-  "Garden":        { emoji: "\u{1F33F}" },   // 🌿
-  "Laundry":       { emoji: "\u{1F455}" },   // 👕
-  "Plumbing":      { emoji: "\u{1F527}" },   // 🔧
-  "Painting":      { emoji: "\u{1F58C}\uFE0F" }, // 🖌️
-  "Grass cutting": { emoji: "\u2702\uFE0F" }, // ✂️
-  "Dishwashing":   { emoji: "\u{1F37D}\uFE0F" }, // 🍽️
-  "Moving":        { emoji: "\u{1F4E6}" },   // 📦
+  "Cleaning":      { emoji: "🧹" },
+  "Garden":        { emoji: "🌿" },
+  "Laundry":       { emoji: "👕" },
+  "Plumbing":      { emoji: "🔧" },
+  "Painting":      { emoji: "🖌️" },
+  "Grass cutting": { emoji: "✂️" },
+  "Dishwashing":   { emoji: "🍽️" },
+  "Moving":        { emoji: "📦" },
 };
 
 const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
@@ -188,7 +188,7 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
                     liveJobs.map(job => (
                       <div key={job.id} className="px-5 py-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                         <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center text-xl shrink-0">
-                          {CATEGORY_META[job.category]?.emoji ?? "\u{1F4CB}"}
+                          {CATEGORY_META[job.category]?.emoji ?? "📋"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-foreground text-sm truncate">{job.title}</p>
