@@ -1,0 +1,135 @@
+Build a full-stack web application called PieceJobs ZA — a South African domestic task marketplace that connects homeowners who need help with small household jobs to local workers who want to earn money doing piece jobs.
+
+## TECH STACK
+- Frontend: React (Vite)
+- Backend/Database: Supabase (I will provide credentials as environment variables)
+- Styling: Tailwind CSS
+- Routing: React Router DOM
+- Icons: Lucide React
+- Build output: dist/public
+- Root directory: artifacts/piecejobs
+
+## ENVIRONMENT VARIABLES (add to Replit Secrets)
+- VITE_SUPABASE_URL — I will paste this after setup
+- VITE_SUPABASE_ANON_KEY — I will paste this after setup
+
+---
+
+## DESIGN SYSTEM
+- Primary navy: #1B2E4B
+- Primary blue: #2D7DD2
+- Accent amber: #F5A623
+- Background: #F4F6F9
+- White: #FFFFFF
+- Font: Inter (body), Plus Jakarta Sans (headings)
+- Clean, professional, trustworthy — not flashy
+- Fully responsive (mobile-first)
+
+---
+
+## DATABASE TABLES (create these in Supabase)
+
+### jobs
+- id (uuid, primary key)
+- title (text)
+- category (text) — values: Cleaning, Garden, Laundry, Plumbing, Painting, Grass cutting, Dishwashing, Moving, Other
+- description (text)
+- budget (integer) — ZAR amount
+- suburb (text)
+- city (text)
+- poster_name (text)
+- contact_number (text)
+- is_urgent (boolean, default false)
+- status (text, default 'open') — open, hired, completed
+- created_at (timestamp, default now())
+
+### workers
+- id (uuid, primary key)
+- first_name (text)
+- last_name (text)
+- skills (text[]) — array of skill categories
+- suburb (text)
+- city (text)
+- id_number (text) — SA ID, stored securely
+- phone (text)
+- hourly_rate (integer)
+- is_verified (boolean, default false)
+- rating (numeric, default 0)
+- review_count (integer, default 0)
+- created_at (timestamp, default now())
+
+### applications
+- id (uuid, primary key)
+- job_id (uuid, references jobs)
+- worker_name (text)
+- worker_phone (text)
+- message (text)
+- proposed_rate (integer)
+- status (text, default 'pending') — pending, accepted, rejected
+- created_at (timestamp, default now())
+
+---
+
+## PAGES & FEATURES TO BUILD
+
+### 1. Landing Page (/)
+- Sticky nav with PieceJobs ZA logo (map pin icon), Browse Jobs, Find Workers, Post a Job (CTA button), Join as Worker (outline button)
+- Hero section: dark navy background, headline "Local work, done by local people", subtext about SA domestic jobs, two CTA buttons (Post a Job / Offer Your Skills), hero card showing 3-4 sample live jobs
+- Job categories grid (8 categories with emoji icons): Cleaning 🧹, Gardening 🌿, Laundry & Ironing 👕, Plumbing 🔧, Painting 🖌️, Grass Cutting ✂️, Dishwashing 🍽️, Moving & Lifting 📦 — clicking a category filters the job board
+- How It Works section: two columns — For Homeowners (3 steps) and For Workers (3 steps)
+- Trust section (dark navy): SA ID Verification, Community Ratings, Secure Payments
+- Footer with links, "Proudly South African 🇿🇦"
+
+### 2. Job Board (/jobs)
+- Search bar + city dropdown filter
+- Category filter chips
+- Tabs: All Jobs / Posted Today / Urgent
+- Job cards showing: category badge, budget (R amount), job title, description snippet, suburb + city, number of applications, poster name with avatar initial, Apply Now button
+- Clicking Apply Now opens the application modal
+- Real-time data from Supabase jobs table
+
+### 3. Post a Job Modal (accessible from anywhere)
+- Fields: Job Title, Category (dropdown), Description (textarea), Budget (ZAR number input), Date Needed, Suburb, City (dropdown: Johannesburg, Cape Town, Durban, Pretoria, Port Elizabeth, East London, Bloemfontein), Your Name, Contact Number
+- On submit: insert into Supabase jobs table, show success toast, refresh job board
+
+### 4. Worker Registration Modal
+- Fields: First Name, Last Name, Skills (multi-select checkboxes for all 8 categories), Suburb, City, SA ID Number (with privacy disclaimer — "Used for verification only. Never shared publicly."), Phone Number, Hourly Rate (ZAR)
+- On submit: insert into Supabase workers table, show success toast
+
+### 5. Apply for Job Modal
+- Shows job summary at top (title, location, budget)
+- Fields: Your Name, Phone Number, Message to homeowner, Your Proposed Rate (ZAR)
+- On submit: insert into Supabase applications table with job_id, show success toast
+
+### 6. Workers Directory (/workers)
+- Grid of worker profile cards showing: avatar (initials + colour), name, primary skill, suburb + city, star rating, review count, skill tags, hourly rate, View Profile button
+- Filter by city and skill category
+- Real data from Supabase workers table
+
+### 7. Seed Data
+Insert the following sample jobs into the database so the app has content on first load:
+- "Full garden cleanup — large plot" | Garden | Sandton, Johannesburg | R450 | Urgent
+- "Ironing — 2 large bags of clothes" | Laundry | Rondebosch, Cape Town | R200
+- "3-bedroom deep clean before move-in" | Cleaning | Umhlanga, Durban | R650 | Urgent
+- "Fix leaking kitchen tap" | Plumbing | Hatfield, Pretoria | R400
+- "Paint garden wall — 12 metres" | Painting | Roodepoort, Johannesburg | R550
+- "Weekly grass cutting — small yard" | Grass cutting | Bellville, Cape Town | R150
+- "Post-party dishwashing & kitchen clean" | Dishwashing | Melville, Johannesburg | R280 | Urgent
+- "Help moving furniture — 2nd floor flat" | Moving | Morningside, Durban | R500
+
+Insert sample workers:
+- Thabo M. | Cleaning, Laundry | Soweto, Johannesburg | R75/hr | Rating 4.9
+- Grace N. | Cleaning, Garden, Grass cutting | Mitchells Plain, Cape Town | R80/hr | Rating 4.8
+- Siphamandla K. | Plumbing, Painting, Moving | KwaMashu, Durban | R120/hr | Rating 4.7
+- Nomsa D. | Cleaning, Dishwashing, Laundry | Mamelodi, Pretoria | R70/hr | Rating 5.0
+
+---
+
+## IMPORTANT NOTES
+- Disable RLS on all tables in Supabase and grant permissions to anon and authenticated roles
+- Use Supabase client initialised from environment variables only — never hardcode credentials
+- All forms use controlled React state — no HTML form elements
+- Show loading states while fetching from Supabase
+- Toast notifications for all successful actions
+- Mobile responsive throughout
+- The app should work end-to-end without authentication for the MVP — anyone can post a job or register as a worker (auth comes in v2)
