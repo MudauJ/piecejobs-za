@@ -1,0 +1,91 @@
+Add authentication and a full role-based system to PieceJobs ZA. Here are the requirements:
+
+## AUTHENTICATION
+- Use Supabase Auth (email + password)
+- Add a login and register page at /login and /register
+- After login, redirect based on role: super_admin → /admin, homeowner → /dashboard, worker → /worker-dashboard
+- Add a logout button in the nav when logged in
+- Protect /admin, /dashboard, and /worker-dashboard routes — redirect to /login if not authenticated
+
+## DATABASE ADDITIONS
+Run these in Supabase:
+
+CREATE TABLE user_profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id),
+  role TEXT NOT NULL DEFAULT 'homeowner', -- 'super_admin', 'homeowner', 'worker'
+  full_name TEXT,
+  phone TEXT,
+  city TEXT,
+  suburb TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE jobs ADD COLUMN posted_by UUID REFERENCES auth.users(id);
+ALTER TABLE workers ADD COLUMN user_id UUID REFERENCES auth.users(id);
+ALTER TABLE applications ADD COLUMN applicant_id UUID REFERENCES auth.users(id);
+
+ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON user_profiles TO anon, authenticated;
+
+-- Insert super admin profile (run after creating the auth user manually)
+-- We will do this separately
+
+## REGISTER PAGE (/register)
+- Two options at the top: "I need help" (Homeowner) or "I want to work" (Worker)
+- Fields: Full Name, Email, Password, Phone, City, Suburb
+- On submit: create Supabase auth user + insert into user_profiles with correct role
+- If registering as Worker, also create a record in the workers table
+
+## LOGIN PAGE (/login)
+- Email and password fields
+- "Don't have an account? Register" link
+- Clean design matching the rest of the app
+
+## SUPER ADMIN DASHBOARD (/admin)
+Only accessible to role = 'super_admin'. Show:
+
+### Stats row at top:
+- Total Jobs Posted
+- Total Workers Registered  
+- Total Applications
+- Pending Verifications (workers where is_verified = false)
+
+### Workers table:
+- Show all workers with: Name, Skills, City, Phone, Registered date, Verified status
+- Action buttons: "Verify" (sets is_verified = true, green button) and "Remove" (deletes worker, red button)
+- Unverified workers highlighted with amber background row
+
+### Jobs table:
+- Show all jobs with: Title, Category, City, Budget, Posted by, Date, Status
+- Action button: "Remove" to delete inappropriate jobs
+
+### Applications table:
+- Show all applications with: Job title, Applicant name, Phone, Message, Proposed rate, Date
+
+### Design: use the same navy/blue/amber colour scheme. Sidebar navigation with: Dashboard Overview, Workers, Jobs, Applications. Header shows "PieceJobs ZA — Admin" with logout button.
+
+## HOMEOWNER DASHBOARD (/dashboard)
+- Show jobs posted by the logged-in user
+- Each job shows: title, category, budget, number of applications, status
+- Click a job to see all applications for it — with applicant name, phone, message, proposed rate
+- Buttons: "Accept" (sets application status to accepted) and "Decline"
+- Button to post a new job (same modal as homepage)
+
+## WORKER DASHBOARD (/worker-dashboard)  
+- Show the worker's profile (editable: skills, suburb, city, rate)
+- Show all jobs they have applied for with status (pending/accepted/declined)
+- Show available jobs matching their skills (same as job board but filtered)
+
+## SUPER ADMIN USER
+After building, I will manually create the super admin user in Supabase Auth with email info@avenuconct.co.za. Then I will run this SQL to set their role:
+INSERT INTO user_profiles (id, role, full_name, email)
+SELECT id, 'super_admin', 'Lesiba Mudau', 'info@avenuconct.co.za'
+FROM auth.users WHERE email = 'info@avenuconct.co.za';
+
+## NAV UPDATES
+- If logged out: show Browse Jobs, Find Workers, Join as Worker, Post a Job (same as now)
+- If logged in as homeowner: show Browse Jobs, My Jobs (→/dashboard), Post a Job, Logout
+- If logged in as worker: show Browse Jobs, My Applications (→/worker-dashboard), Logout
+- If logged in as super_admin: show Admin Dashboard (→/admin), Logout
+
+Keep all existing functionality intact. Push to GitHub (MudauJ/piecejobs-za) on main branch when done.

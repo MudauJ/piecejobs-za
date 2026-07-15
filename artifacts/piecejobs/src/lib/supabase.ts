@@ -22,6 +22,7 @@ export type Job = {
   is_urgent: boolean;
   status: string;
   created_at: string;
+  posted_by?: string;
   application_count?: number;
 };
 
@@ -39,6 +40,7 @@ export type Worker = {
   rating: number;
   review_count: number;
   created_at: string;
+  user_id?: string;
 };
 
 export type Application = {
@@ -49,6 +51,17 @@ export type Application = {
   message: string;
   proposed_rate: number;
   status: string;
+  created_at: string;
+  applicant_id?: string;
+};
+
+export type UserProfile = {
+  id: string;
+  role: "super_admin" | "homeowner" | "worker";
+  full_name: string | null;
+  phone: string | null;
+  city: string | null;
+  suburb: string | null;
   created_at: string;
 };
 
