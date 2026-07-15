@@ -1,0 +1,56 @@
+Build Phase 2 — Trust & Safety for PieceJobs ZA.
+
+## 1. HOMEOWNER DASHBOARD — Accept/Decline Applications
+
+In the homeowner dashboard (/dashboard), when a homeowner clicks on one of their jobs to see applications:
+
+- Each application card shows: applicant name, phone, message, proposed rate, date applied, current status badge (pending/accepted/declined)
+- "Accept" button (green) — sets application status to 'accepted' in Supabase, sets job status to 'hired', and opens a WhatsApp link to the worker's phone with message: "Hi! Your application for [job title] on PieceJobs ZA has been accepted. The homeowner will contact you shortly. Congratulations!"
+- "Decline" button (red outline) — sets application status to 'declined'
+- Once a job is 'hired', show a "Mark as Complete" button on the job card — clicking it sets job status to 'completed'
+- Only one application can be accepted per job
+
+Use direct fetch to Supabase REST API with these credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+## 2. RATINGS & REVIEWS
+
+Add a reviews table to Supabase:
+
+CREATE TABLE IF NOT EXISTS reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID REFERENCES jobs(id),
+  worker_id UUID REFERENCES workers(id),
+  homeowner_name TEXT,
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE reviews DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON reviews TO anon, authenticated;
+
+When a job is marked as complete:
+- Show a "Rate this Worker" modal with: star rating (1-5, clickable stars), comment textarea, submit button
+- On submit: insert into reviews table, update the worker's rating (average) and review_count in the workers table
+- Show a success toast "Review submitted! Thank you."
+
+## 3. JOB STATUS UPDATES
+
+Update job cards on the job board (/jobs) to show status badges:
+- 'open' → green "Open" badge
+- 'hired' → amber "Hired" badge  
+- 'completed' → grey "Completed" badge
+
+Hide 'hired' and 'completed' jobs from the main job board by default — only show 'open' jobs. Add a filter toggle "Show all jobs" that reveals them.
+
+## 4. WORKER DASHBOARD — Application Status
+
+In the worker dashboard (/worker-dashboard), the "My Applications" tab should show:
+- Each application with: job title, homeowner suburb/city, your proposed rate, date applied
+- Status badge: Pending (grey), Accepted (green), Declined (red)
+- If Accepted: show a green banner "🎉 You got the job! Contact the homeowner to confirm details."
+- If Declined: show "Keep applying — other jobs are waiting!"
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

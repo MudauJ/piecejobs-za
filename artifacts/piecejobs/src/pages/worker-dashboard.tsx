@@ -9,21 +9,22 @@ import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle } from
 import type { ModalState } from "@/App";
 
 type Tab = "profile" | "applications" | "jobs";
+type AppWithJob = Application & { job_title?: string; job_suburb?: string; job_city?: string };
 
 export default function WorkerDashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
-  const { user, profile } = useAuth();
-  const [tab, setTab]       = useState<Tab>("profile");
-  const [worker, setWorker] = useState<Worker | null>(null);
-  const [applications, setApplications] = useState<(Application & { job_title?: string })[]>([]);
+  const { user, profile }       = useAuth();
+  const [tab, setTab]           = useState<Tab>("profile");
+  const [worker, setWorker]     = useState<Worker | null>(null);
+  const [applications, setApplications] = useState<AppWithJob[]>([]);
   const [matchingJobs, setMatchingJobs] = useState<Job[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [editing, setEditing]           = useState(false);
-  const [saving, setSaving]             = useState(false);
+  const [loading, setLoading]   = useState(true);
+  const [editing, setEditing]   = useState(false);
+  const [saving, setSaving]     = useState(false);
 
-  const [editSuburb, setEditSuburb]     = useState("");
-  const [editCity, setEditCity]         = useState("");
-  const [editRate, setEditRate]         = useState("");
-  const [editSkills, setEditSkills]     = useState<string[]>([]);
+  const [editSuburb, setEditSuburb] = useState("");
+  const [editCity, setEditCity]     = useState("");
+  const [editRate, setEditRate]     = useState("");
+  const [editSkills, setEditSkills] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -34,36 +35,28 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     setLoading(true);
     const [wRes, appRes] = await Promise.all([
       supabase.from("workers").select("*").eq("user_id", user!.id).single(),
-      supabase.from("applications").select("*, jobs(title)").eq("applicant_id", user!.id).order("created_at", { ascending: false }),
+      supabase.from("applications")
+        .select("*, jobs(title,suburb,city)")
+        .eq("applicant_id", user!.id)
+        .order("created_at", { ascending: false }),
     ]);
 
     const w = wRes.data as Worker | null;
     setWorker(w);
 
-    const apps = (appRes.data ?? []).map((a: Application & { jobs?: { title: string } }) => ({
+    const apps = (appRes.data ?? []).map((a: Application & { jobs?: { title: string; suburb: string; city: string } }) => ({
       ...a,
-      job_title: a.jobs?.title ?? "Unknown job",
+      job_title:  a.jobs?.title  ?? "Unknown job",
+      job_suburb: a.jobs?.suburb ?? "",
+      job_city:   a.jobs?.city   ?? "",
     }));
     setApplications(apps);
 
-    if (w?.skills?.length) {
-      const { data: jData } = await supabase
-        .from("jobs")
-        .select("*")
-        .in("category", w.skills)
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .limit(20);
-      setMatchingJobs(jData ?? []);
-    } else {
-      const { data: jData } = await supabase
-        .from("jobs")
-        .select("*")
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .limit(20);
-      setMatchingJobs(jData ?? []);
-    }
+    const query = supabase.from("jobs").select("*").eq("status", "open").order("created_at", { ascending: false }).limit(20);
+    const { data: jData } = w?.skills?.length
+      ? await query.in("category", w.skills)
+      : await query;
+    setMatchingJobs(jData ?? []);
 
     setLoading(false);
   }
@@ -98,9 +91,9 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const SKILL_CATS = CATEGORIES.filter(c => c !== "Other");
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: "profile",      label: "My Profile",    icon: <MapPin     className="h-4 w-4" /> },
-    { key: "applications", label: "My Applications", icon: <Briefcase className="h-4 w-4" /> },
-    { key: "jobs",         label: "Available Jobs", icon: <CheckCircle2 className="h-4 w-4" /> },
+    { key: "profile",      label: "My Profile",      icon: <MapPin       className="h-4 w-4" /> },
+    { key: "applications", label: "My Applications", icon: <Briefcase    className="h-4 w-4" /> },
+    { key: "jobs",         label: "Available Jobs",  icon: <CheckCircle2 className="h-4 w-4" /> },
   ];
 
   return (
@@ -108,9 +101,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
       <div className="bg-white border-b border-border">
         <div className="container mx-auto px-6 py-8">
           <h1 className="font-serif text-4xl font-bold" style={{ color: "#1B2E4B" }}>Worker Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Welcome, {profile?.full_name?.split(" ")[0] ?? "there"} 👋
-          </p>
+          <p className="text-muted-foreground mt-1">Welcome, {profile?.full_name?.split(" ")[0] ?? "there"} 👋</p>
         </div>
       </div>
 
@@ -261,27 +252,39 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                     </Button>
                   </div>
                 ) : applications.map(app => (
-                  <div key={app.id} className="bg-white border border-border rounded-2xl p-6">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="space-y-1">
+                  <div key={app.id} className="bg-white border border-border rounded-2xl p-6 space-y-3">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                      <div className="space-y-1.5">
                         <h3 className="font-serif font-bold text-lg text-foreground">{app.job_title}</h3>
-                        <p className="text-sm text-muted-foreground">{app.message}</p>
-                        <p className="text-sm font-bold" style={{ color: "#F5A623" }}>Proposed: R{app.proposed_rate}</p>
+                        {(app.job_suburb || app.job_city) && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            {[app.job_suburb, app.job_city].filter(Boolean).join(", ")}
+                          </p>
+                        )}
+                        <p className="text-sm font-bold" style={{ color: "#F5A623" }}>Your rate: R{app.proposed_rate}</p>
+                        <p className="text-xs text-muted-foreground">Applied {new Date(app.created_at).toLocaleDateString("en-ZA")}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`inline-flex items-center gap-1.5 text-sm font-bold rounded-full px-3 py-1.5 ${
-                          app.status === "accepted"  ? "bg-green-50 text-green-700 border border-green-200" :
-                          app.status === "declined"  ? "bg-red-50 text-red-600 border border-red-200" :
-                          "bg-amber-50 text-amber-700 border border-amber-200"
-                        }`}>
-                          {app.status === "accepted"  ? <CheckCircle2 className="h-3.5 w-3.5" /> :
-                           app.status === "declined"  ? <XCircle      className="h-3.5 w-3.5" /> :
-                           <Clock                       className="h-3.5 w-3.5" />}
-                          {app.status}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{new Date(app.created_at).toLocaleDateString("en-ZA")}</span>
-                      </div>
+                      <span className={`inline-flex items-center gap-1.5 text-sm font-bold rounded-full px-3 py-1.5 shrink-0 ${
+                        app.status === "accepted" ? "bg-green-50 text-green-700 border border-green-200" :
+                        app.status === "declined" ? "bg-red-50 text-red-600 border border-red-200" :
+                        "bg-muted text-muted-foreground"
+                      }`}>
+                        {app.status === "accepted" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
+                         app.status === "declined" ? <XCircle      className="h-3.5 w-3.5" /> :
+                         <Clock className="h-3.5 w-3.5" />}
+                        {app.status === "accepted" ? "Accepted" : app.status === "declined" ? "Declined" : "Pending"}
+                      </span>
                     </div>
+
+                    {app.status === "accepted" && (
+                      <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm font-semibold text-green-800">
+                        🎉 You got the job! Contact the homeowner to confirm details.
+                      </div>
+                    )}
+                    {app.status === "declined" && (
+                      <p className="text-sm text-muted-foreground italic">Keep applying — other jobs are waiting!</p>
+                    )}
                   </div>
                 ))}
               </div>

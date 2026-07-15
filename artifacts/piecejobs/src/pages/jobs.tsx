@@ -36,6 +36,7 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
   const [cityFilter, setCityFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tab, setTab] = useState<"all" | "today" | "urgent">("all");
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     async function fetchJobs() {
@@ -43,7 +44,6 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
       const { data, error } = await supabase
         .from("jobs")
         .select("*, applications(count)")
-        .eq("status", "open")
         .order("created_at", { ascending: false });
       if (!error && data) {
         setJobs(data.map((j: Job & { applications?: { count: number }[] }) => ({
@@ -59,7 +59,10 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
   const now = Date.now();
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
 
+  const openJobs = jobs.filter(j => j.status === "open");
+
   const filteredJobs = jobs.filter(job => {
+    if (!showAll && job.status !== "open") return false;
     if (cityFilter !== "all" && job.city !== cityFilter) return false;
     if (categoryFilter !== "all" && job.category !== categoryFilter) return false;
     if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.description ?? "").toLowerCase().includes(search.toLowerCase())) return false;
@@ -68,8 +71,9 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
     return true;
   });
 
-  const urgentCount = jobs.filter(j => j.is_urgent).length;
-  const todayCount = jobs.filter(j => new Date(j.created_at) >= todayStart).length;
+  const baseJobs = showAll ? jobs : openJobs;
+  const urgentCount = baseJobs.filter(j => j.is_urgent).length;
+  const todayCount  = baseJobs.filter(j => new Date(j.created_at) >= todayStart).length;
 
   return (
     <div className="bg-background min-h-screen">
@@ -80,7 +84,7 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
             <div>
               <h1 className="font-serif text-4xl font-bold text-foreground">Available Jobs</h1>
               <p className="text-muted-foreground mt-1 text-base">
-                {jobs.length > 0 ? `${jobs.length} open piece jobs across South Africa` : "Find piece jobs in your area"}
+                {openJobs.length > 0 ? `${openJobs.length} open piece job${openJobs.length !== 1 ? "s" : ""} across South Africa` : "Find piece jobs in your area"}
               </p>
             </div>
             <Button
@@ -140,22 +144,32 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
           ))}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-8 bg-white rounded-xl p-1 border border-border w-fit">
-          {([
-            { key: "all", label: `All Jobs (${jobs.length})` },
-            { key: "today", label: `Posted Today (${todayCount})` },
-            { key: "urgent", label: `Urgent (${urgentCount})` },
-          ] as const).map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              data-testid={`tab-${t.key}`}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Tabs + Show all toggle */}
+        <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
+          <div className="flex gap-1 bg-white rounded-xl p-1 border border-border w-fit">
+            {([
+              { key: "all",    label: `All (${baseJobs.length})` },
+              { key: "today",  label: `Posted Today (${todayCount})` },
+              { key: "urgent", label: `Urgent (${urgentCount})` },
+            ] as const).map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                data-testid={`tab-${t.key}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowAll(v => !v)}
+            className={`text-sm font-semibold px-4 py-2 rounded-lg border transition-all ${
+              showAll ? "bg-primary text-white border-primary" : "bg-white text-foreground border-border hover:border-primary"
+            }`}
+          >
+            {showAll ? "Showing all jobs" : "Show all jobs"}
+          </button>
         </div>
 
         {/* Results */}
@@ -195,6 +209,16 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                             <Flame className="h-3 w-3" />Urgent
                           </span>
                         )}
+                        {job.status === "hired" && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            Hired
+                          </span>
+                        )}
+                        {job.status === "completed" && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-muted text-muted-foreground">
+                            Completed
+                          </span>
+                        )}
                       </div>
 
                       <h3 className="font-serif text-xl font-bold text-foreground leading-snug">{job.title}</h3>
@@ -229,13 +253,21 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                         <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Budget</p>
                         <p className="font-serif text-3xl font-extrabold" style={{ color: "#1B2E4B" }}>R{job.budget}</p>
                       </div>
-                      <Button
-                        onClick={() => setModalState(prev => ({ ...prev, applyJob: job.id }))}
-                        className="font-bold shadow-sm px-6 h-11 bg-primary hover:bg-primary/90 text-white"
-                        data-testid={`button-apply-${job.id}`}
-                      >
-                        Apply Now
-                      </Button>
+                      {job.status === "open" ? (
+                        <Button
+                          onClick={() => setModalState(prev => ({ ...prev, applyJob: job.id }))}
+                          className="font-bold shadow-sm px-6 h-11 bg-primary hover:bg-primary/90 text-white"
+                          data-testid={`button-apply-${job.id}`}
+                        >
+                          Apply Now
+                        </Button>
+                      ) : (
+                        <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
+                          job.status === "hired" ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"
+                        }`}>
+                          {job.status === "hired" ? "Position Filled" : "Completed"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
