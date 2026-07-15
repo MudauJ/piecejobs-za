@@ -3,7 +3,6 @@ import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
 import { useState, type ReactNode } from "react";
 import Landing from "@/pages/landing";
 import Jobs from "@/pages/jobs";
@@ -13,6 +12,7 @@ import Register from "@/pages/register";
 import Admin from "@/pages/admin";
 import Dashboard from "@/pages/dashboard";
 import WorkerDashboard from "@/pages/worker-dashboard";
+import NotFound from "@/pages/not-found";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
 import PostJobModal from "@/components/modals/post-job-modal";
@@ -56,12 +56,12 @@ function ProtectedRoute({
     return null;
   }
 
-  if (requiredRole) {
+  if (requiredRole && role) {
     const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-    if (role && !allowed.includes(role)) {
-      if (role === "super_admin") setLocation("/admin");
+    if (!allowed.includes(role)) {
+      if (role === "super_admin")  setLocation("/admin");
       else if (role === "homeowner") setLocation("/dashboard");
-      else setLocation("/worker-dashboard");
+      else                           setLocation("/worker-dashboard");
       return null;
     }
   }
@@ -69,55 +69,20 @@ function ProtectedRoute({
   return <>{children}</>;
 }
 
-const FULL_PAGE_ROUTES = ["/login", "/register", "/admin"];
-
-function AppShell({
+function Shell({
+  children,
   modalState,
   setModalState,
 }: {
+  children: ReactNode;
   modalState: ModalState;
   setModalState: React.Dispatch<React.SetStateAction<ModalState>>;
 }) {
-  const [location] = useLocation();
-  const isFullPage = FULL_PAGE_ROUTES.some(r => location.startsWith(r));
-
-  if (isFullPage) {
-    return (
-      <Switch>
-        <Route path="/login"    component={Login} />
-        <Route path="/register" component={Register} />
-        <Route path="/admin"    component={() => (
-          <ProtectedRoute requiredRole="super_admin">
-            <Admin />
-          </ProtectedRoute>
-        )} />
-      </Switch>
-    );
-  }
-
   return (
     <div className="flex flex-col min-h-[100dvh] w-full font-sans">
       <Navbar setModalState={setModalState} />
-      <main className="flex-1">
-        <Switch>
-          <Route path="/"                  component={() => <Landing       setModalState={setModalState} />} />
-          <Route path="/jobs"              component={() => <Jobs          setModalState={setModalState} />} />
-          <Route path="/workers"           component={() => <Workers       setModalState={setModalState} />} />
-          <Route path="/dashboard"         component={() => (
-            <ProtectedRoute requiredRole="homeowner">
-              <Dashboard setModalState={setModalState} />
-            </ProtectedRoute>
-          )} />
-          <Route path="/worker-dashboard"  component={() => (
-            <ProtectedRoute requiredRole="worker">
-              <WorkerDashboard setModalState={setModalState} />
-            </ProtectedRoute>
-          )} />
-          <Route component={NotFound} />
-        </Switch>
-      </main>
+      <main className="flex-1">{children}</main>
       <Footer />
-
       <PostJobModal
         open={modalState.postJob}
         onOpenChange={open => setModalState(prev => ({ ...prev, postJob: open }))}
@@ -136,11 +101,67 @@ function AppShell({
   );
 }
 
+function AppRoutes({
+  modalState,
+  setModalState,
+}: {
+  modalState: ModalState;
+  setModalState: React.Dispatch<React.SetStateAction<ModalState>>;
+}) {
+  return (
+    <Switch>
+      {/* Full-page routes — no navbar/footer */}
+      <Route path="/login"    component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/admin"    component={() => (
+        <ProtectedRoute requiredRole="super_admin">
+          <Admin />
+        </ProtectedRoute>
+      )} />
+
+      {/* Protected dashboard routes */}
+      <Route path="/dashboard" component={() => (
+        <ProtectedRoute requiredRole="homeowner">
+          <Shell modalState={modalState} setModalState={setModalState}>
+            <Dashboard setModalState={setModalState} />
+          </Shell>
+        </ProtectedRoute>
+      )} />
+      <Route path="/worker-dashboard" component={() => (
+        <ProtectedRoute requiredRole="worker">
+          <Shell modalState={modalState} setModalState={setModalState}>
+            <WorkerDashboard setModalState={setModalState} />
+          </Shell>
+        </ProtectedRoute>
+      )} />
+
+      {/* Public routes with shell */}
+      <Route path="/jobs"    component={() => (
+        <Shell modalState={modalState} setModalState={setModalState}>
+          <Jobs setModalState={setModalState} />
+        </Shell>
+      )} />
+      <Route path="/workers" component={() => (
+        <Shell modalState={modalState} setModalState={setModalState}>
+          <Workers setModalState={setModalState} />
+        </Shell>
+      )} />
+      <Route path="/" component={() => (
+        <Shell modalState={modalState} setModalState={setModalState}>
+          <Landing setModalState={setModalState} />
+        </Shell>
+      )} />
+
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function App() {
   const [modalState, setModalState] = useState<ModalState>({
-    postJob: false,
+    postJob:   false,
     workerReg: false,
-    applyJob: null,
+    applyJob:  null,
   });
 
   return (
@@ -148,7 +169,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <WouterRouter hook={useHashLocation}>
-            <AppShell modalState={modalState} setModalState={setModalState} />
+            <AppRoutes modalState={modalState} setModalState={setModalState} />
           </WouterRouter>
           <Toaster />
         </AuthProvider>
