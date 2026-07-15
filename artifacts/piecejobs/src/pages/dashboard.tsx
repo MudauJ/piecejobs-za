@@ -49,8 +49,22 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
 
   async function fetchJobs() {
     setLoading(true);
-    const r = await sbFetch(`jobs?posted_by=eq.${user!.id}&select=*,applications(*)&order=created_at.desc`);
-    setJobs(r.ok ? await r.json() : []);
+    const uid      = user!.id;
+    const fullName = profile?.full_name ?? "";
+
+    const [byId, byName] = await Promise.all([
+      sbFetch(`jobs?posted_by=eq.${uid}&select=*,applications(*)&order=created_at.desc`),
+      fullName
+        ? sbFetch(`jobs?posted_by=is.null&poster_name=eq.${encodeURIComponent(fullName)}&select=*,applications(*)&order=created_at.desc`)
+        : Promise.resolve(null),
+    ]);
+
+    const fromId:   JobWithApps[] = byId.ok   ? await byId.json()         : [];
+    const fromName: JobWithApps[] = byName?.ok ? await byName.json()       : [];
+    const seen = new Set(fromId.map(j => j.id));
+    const merged = [...fromId, ...fromName.filter(j => !seen.has(j.id))];
+    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setJobs(merged);
     setLoading(false);
   }
 

@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase, CATEGORIES, CITIES } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function PostJobModal({ open, onOpenChange }: Props) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,6 +56,7 @@ export default function PostJobModal({ open, onOpenChange }: Props) {
       ...values,
       is_urgent: false,
       status: "open",
+      posted_by: user?.id ?? null,
     }]);
     setSubmitting(false);
     if (error) {
