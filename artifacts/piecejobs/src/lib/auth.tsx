@@ -38,14 +38,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function fetchProfile(userId: string) {
-    const { data, error } = await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL as string;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-    console.log("[auth] fetchProfile result:", { userId, role: data?.role ?? null, error: error?.message ?? null });
-    setProfile(data ?? null);
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userId}&select=*`,
+      {
+        headers: {
+          "apikey":        SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type":  "application/json",
+        },
+      }
+    );
+    const rows = await response.json();
+    const data = rows[0] ?? null;
+
+    console.log("[auth] fetchProfile result:", { userId, role: data?.role ?? null, status: response.status });
+    setProfile(data);
   }
 
   useEffect(() => {

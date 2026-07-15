@@ -26,21 +26,28 @@ export default function Login() {
     }
 
     if (data.user) {
-      const { data: profile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single();
+      const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${data.user.id}&select=role`,
+        {
+          headers: {
+            "apikey":        SUPABASE_ANON_KEY,
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type":  "application/json",
+          },
+        }
+      );
+      const rows = await res.json();
+      const role = rows[0]?.role as string | undefined;
 
       console.log("[login] profile fetch:", {
         userId: data.user.id,
         email: data.user.email,
-        role: profile?.role ?? null,
-        error: profileError?.message ?? null,
-        errorCode: profileError?.code ?? null,
+        role: role ?? null,
+        status: res.status,
       });
-
-      const role = profile?.role;
 
       if (!role) {
         console.warn("[login] No role returned — check user_profiles RLS policies and that a row exists for this user.");
