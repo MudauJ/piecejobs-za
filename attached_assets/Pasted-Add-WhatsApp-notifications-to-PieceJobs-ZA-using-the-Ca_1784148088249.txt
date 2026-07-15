@@ -1,0 +1,39 @@
+Add WhatsApp notifications to PieceJobs ZA using the CallMeBot API (free, no account needed for WhatsApp).
+
+When a worker applies for a job, send a WhatsApp message to the homeowner's contact number stored in the jobs table.
+
+When a job is posted, we don't need a notification yet.
+
+Implementation:
+
+1. Create a new file src/lib/whatsapp.ts with this function:
+
+export async function sendWhatsAppNotification(phone: string, message: string) {
+  // Format SA phone number: remove spaces, leading 0 becomes +27
+  const formatted = phone.replace(/\s/g, '').replace(/^0/, '+27');
+  const encoded = encodeURIComponent(message);
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${formatted}&text=${encoded}&apikey=YOUR_API_KEY`;
+  
+  try {
+    await fetch(url);
+  } catch (error) {
+    console.error('WhatsApp notification failed:', error);
+  }
+}
+
+2. In the Apply for Job flow (wherever applications are inserted into Supabase), after a successful insert:
+- Fetch the job details to get the poster's contact_number and job title
+- Call sendWhatsAppNotification with message:
+"New application on PieceJobs ZA! Someone applied for your job: [job title]. Log in to view their details: piece-jobs-za.replit.app"
+
+3. Add a note in the UI that notifications require the homeowner to have registered with CallMeBot first (they send "I allow callmebot to send me messages" to +34 644 59 62 09 on WhatsApp).
+
+Actually - instead of CallMeBot which requires registration, use a simpler approach:
+After a successful application, show a modal or toast that says:
+"Application sent! The homeowner will be notified." 
+AND open a pre-filled WhatsApp message link in a new tab:
+window.open(`https://wa.me/${formattedPhone}?text=Hi! I applied for your job "${jobTitle}" on PieceJobs ZA. Please check your dashboard to review my application.`)
+
+This way workers can directly message homeowners on WhatsApp with one click — no API keys needed, works immediately.
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish.

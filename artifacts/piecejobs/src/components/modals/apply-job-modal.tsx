@@ -3,13 +3,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase, type Job } from "@/lib/supabase";
+import { openWhatsAppMessage } from "@/lib/whatsapp";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, MapPin, Banknote } from "lucide-react";
+import { Loader2, MapPin, Banknote, MessageCircle } from "lucide-react";
 
 const schema = z.object({
   worker_name: z.string().min(2, "Your name is required"),
@@ -46,7 +47,7 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
   });
 
   async function onSubmit(values: FormValues) {
-    if (!jobId) return;
+    if (!jobId || !job) return;
     setSubmitting(true);
     const { error } = await supabase.from("applications").insert([{
       ...values,
@@ -57,9 +58,16 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
     if (error) {
       toast({ title: "Application failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Application sent!", description: "The homeowner will be in touch if they choose you." });
+      toast({
+        title: "Application sent!",
+        description: "Opening WhatsApp so you can message the homeowner directly.",
+      });
       form.reset();
       onOpenChange(false);
+      if (job.contact_number) {
+        const msg = `Hi! I applied for your job "${job.title}" on PieceJobs ZA. Please check your dashboard to review my application.`;
+        openWhatsAppMessage(job.contact_number, msg);
+      }
     }
   }
 
@@ -120,6 +128,11 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
                 <FormMessage />
               </FormItem>
             )} />
+
+            <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2.5 text-xs text-green-800">
+              <MessageCircle className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
+              <span>After submitting, WhatsApp will open so you can message the homeowner directly — no account needed.</span>
+            </div>
 
             <div className="flex gap-3 pt-1">
               <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
