@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase, type Worker, type Job, type Application, CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+
+const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,23 +36,41 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
 
   async function fetchAll() {
     setLoading(true);
-    const [wRes, appRes] = await Promise.all([
-      supabase.from("workers").select("*").eq("user_id", user!.id).single(),
-      supabase.from("applications")
-        .select("*, jobs(title,suburb,city)")
-        .eq("applicant_id", user!.id)
-        .order("created_at", { ascending: false }),
-    ]);
+    const userId = user!.id;
 
+    const headers = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` };
+
+    const wRes = await supabase.from("workers").select("*").eq("user_id", userId).single();
     const w = wRes.data as Worker | null;
     setWorker(w);
 
-    const apps = (appRes.data ?? []).map((a: Application & { jobs?: { title: string; suburb: string; city: string } }) => ({
+    type RawApp = Application & { jobs?: { title: string; suburb: string; city: string; budget: number } };
+
+    const toAppWithJob = (a: RawApp): AppWithJob => ({
       ...a,
       job_title:  a.jobs?.title  ?? "Unknown job",
       job_suburb: a.jobs?.suburb ?? "",
       job_city:   a.jobs?.city   ?? "",
-    }));
+    });
+
+    const byIdRes = await fetch(
+      `${SB_URL}/rest/v1/applications?applicant_id=eq.${userId}&select=*,jobs(title,suburb,city,budget)&order=created_at.desc`,
+      { headers },
+    );
+    const byId: RawApp[] = byIdRes.ok ? await byIdRes.json() : [];
+
+    let apps: AppWithJob[] = byId.map(toAppWithJob);
+
+    if (apps.length === 0 && w?.phone) {
+      const phone = encodeURIComponent(w.phone);
+      const byPhoneRes = await fetch(
+        `${SB_URL}/rest/v1/applications?worker_phone=eq.${phone}&select=*,jobs(title,suburb,city,budget)&order=created_at.desc`,
+        { headers },
+      );
+      const byPhone: RawApp[] = byPhoneRes.ok ? await byPhoneRes.json() : [];
+      apps = byPhone.map(toAppWithJob);
+    }
+
     setApplications(apps);
 
     const query = supabase.from("jobs").select("*").eq("status", "open").order("created_at", { ascending: false }).limit(20);

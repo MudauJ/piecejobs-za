@@ -3,7 +3,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase, type Job } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { openWhatsAppMessage } from "@/lib/whatsapp";
+
+const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -27,6 +31,7 @@ interface Props {
 }
 
 export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
@@ -49,14 +54,25 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
   async function onSubmit(values: FormValues) {
     if (!jobId || !job) return;
     setSubmitting(true);
-    const { error } = await supabase.from("applications").insert([{
-      ...values,
-      job_id: jobId,
-      status: "pending",
-    }]);
+    const r = await fetch(`${SB_URL}/rest/v1/applications`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SB_KEY,
+        "Authorization": `Bearer ${SB_KEY}`,
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify({
+        ...values,
+        job_id:       jobId,
+        status:       "pending",
+        applicant_id: user?.id ?? null,
+      }),
+    });
     setSubmitting(false);
-    if (error) {
-      toast({ title: "Application failed", description: error.message, variant: "destructive" });
+    if (!r.ok) {
+      const msg = await r.text();
+      toast({ title: "Application failed", description: msg, variant: "destructive" });
     } else {
       toast({
         title: "Application sent!",
