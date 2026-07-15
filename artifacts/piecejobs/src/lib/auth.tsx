@@ -38,11 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_profiles")
       .select("*")
       .eq("id", userId)
       .single();
+
+    console.log("[auth] fetchProfile result:", { userId, role: data?.role ?? null, error: error?.message ?? null });
     setProfile(data ?? null);
   }
 

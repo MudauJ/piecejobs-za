@@ -26,15 +26,43 @@ export default function Login() {
     }
 
     if (data.user) {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("user_profiles")
         .select("role")
         .eq("id", data.user.id)
         .single();
+
+      console.log("[login] profile fetch:", {
+        userId: data.user.id,
+        email: data.user.email,
+        role: profile?.role ?? null,
+        error: profileError?.message ?? null,
+        errorCode: profileError?.code ?? null,
+      });
+
       const role = profile?.role;
-      if (role === "super_admin") setLocation("/admin");
-      else if (role === "worker")  setLocation("/worker-dashboard");
-      else                         setLocation("/dashboard");
+
+      if (!role) {
+        console.warn("[login] No role returned — check user_profiles RLS policies and that a row exists for this user.");
+        toast({
+          title: "Profile error",
+          description: "Could not load your account role. Please contact support.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (role === "super_admin") {
+        console.log("[login] redirecting to /admin");
+        setLocation("/admin");
+      } else if (role === "worker") {
+        console.log("[login] redirecting to /worker-dashboard");
+        setLocation("/worker-dashboard");
+      } else {
+        console.log("[login] redirecting to /dashboard");
+        setLocation("/dashboard");
+      }
     }
     setLoading(false);
   }
