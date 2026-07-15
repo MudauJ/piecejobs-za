@@ -78,6 +78,7 @@ function Shell({
   modalState: ModalState;
   setModalState: React.Dispatch<React.SetStateAction<ModalState>>;
 }) {
+  const { user } = useAuth();
   return (
     <div className="flex flex-col min-h-[100dvh] w-full font-sans">
       <Navbar setModalState={setModalState} />
@@ -86,6 +87,7 @@ function Shell({
       <PostJobModal
         open={modalState.postJob}
         onOpenChange={open => setModalState(prev => ({ ...prev, postJob: open }))}
+        userId={user?.id}
       />
       <WorkerRegistrationModal
         open={modalState.workerReg}

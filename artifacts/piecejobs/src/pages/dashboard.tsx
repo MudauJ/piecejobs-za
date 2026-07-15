@@ -55,7 +55,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     const [byId, byName] = await Promise.all([
       sbFetch(`jobs?posted_by=eq.${uid}&select=*,applications(*)&order=created_at.desc`),
       fullName
-        ? sbFetch(`jobs?posted_by=is.null&poster_name=eq.${encodeURIComponent(fullName)}&select=*,applications(*)&order=created_at.desc`)
+        ? sbFetch(`jobs?poster_name=eq.${encodeURIComponent(fullName)}&select=*,applications(*)&order=created_at.desc`)
         : Promise.resolve(null),
     ]);
 

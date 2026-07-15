@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { CATEGORIES, CITIES } from "@/lib/supabase";
-import { useAuth } from "@/lib/auth";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -32,10 +31,10 @@ type FormValues = z.infer<typeof schema>;
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  userId?: string;
 }
 
-export default function PostJobModal({ open, onOpenChange }: Props) {
-  const { user } = useAuth();
+export default function PostJobModal({ open, onOpenChange, userId }: Props) {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,7 +73,7 @@ export default function PostJobModal({ open, onOpenChange }: Props) {
         contact_number: values.contact_number,
         is_urgent:      false,
         status:         "open",
-        posted_by:      user?.id ?? null,
+        posted_by:      userId ?? null,
       }),
     });
     setSubmitting(false);
