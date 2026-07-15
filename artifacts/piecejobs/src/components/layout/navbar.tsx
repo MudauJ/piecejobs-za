@@ -84,9 +84,6 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
               <Link href="/jobs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 Browse Jobs
               </Link>
-              <Link href="/workers" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                Find Workers
-              </Link>
               <Link href="/worker-dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 My Applications
               </Link>
