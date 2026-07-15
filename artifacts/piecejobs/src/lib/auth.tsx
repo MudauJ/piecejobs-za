@@ -38,25 +38,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function fetchProfile(userId: string) {
-    const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
-    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    const url = `https://vnrvwfialfvduvetoewa.supabase.co/rest/v1/user_profiles?id=eq.${userId}&select=*`;
+    const key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userId}&select=*`,
-      {
-        headers: {
-          "apikey":        SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type":  "application/json",
-        },
+    console.log("fetchProfile called with userId:", userId);
+
+    const response = await fetch(url, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json'
       }
-    );
-    const rows = await response.json();
-    console.log("fetchProfile raw response:", JSON.stringify(rows));
-    const data = rows[0] ?? null;
-    const role = data?.role ?? null;
-    console.log("[auth] fetchProfile result:", { userId, role, status: response.status });
-    setProfile(data);
+    });
+
+    const text = await response.text();
+    console.log("fetchProfile response status:", response.status);
+    console.log("fetchProfile response body:", text);
+
+    const data = JSON.parse(text);
+    setProfile(data[0] ?? null);
   }
 
   useEffect(() => {
