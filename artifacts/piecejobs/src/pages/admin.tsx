@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
-import { supabase, type Job, type Worker, type Application } from "@/lib/supabase";
+import { type Job, type Worker, type Application } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,8 +9,24 @@ import {
   MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2,
 } from "lucide-react";
 
-type Section = "overview" | "workers" | "jobs" | "applications";
+const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 
+function sbHeaders(extra?: Record<string, string>) {
+  return {
+    "apikey":        SB_KEY,
+    "Authorization": `Bearer ${SB_KEY}`,
+    "Content-Type":  "application/json",
+    ...extra,
+  };
+}
+
+async function sbGet<T>(path: string): Promise<T[]> {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: sbHeaders() });
+  return r.ok ? r.json() : [];
+}
+
+type Section = "overview" | "workers" | "jobs" | "applications";
 type Stats = { jobs: number; workers: number; applications: number; pending: number };
 
 export default function Admin() {
@@ -23,24 +39,17 @@ export default function Admin() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<(Application & { job_title?: string })[]>([]);
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const [jobsRes, workersRes, appsRes] = await Promise.all([
-      supabase.from("jobs").select("*").order("created_at", { ascending: false }),
-      supabase.from("workers").select("*").order("created_at", { ascending: false }),
-      supabase.from("applications").select("*, jobs(title)").order("created_at", { ascending: false }),
+    const [jobsData, wkData, appsRaw] = await Promise.all([
+      sbGet<Job>("jobs?select=*&order=created_at.desc"),
+      sbGet<Worker>("workers?select=*&order=created_at.desc"),
+      sbGet<Application & { jobs?: { title: string } }>("applications?select=*,jobs(title)&order=created_at.desc"),
     ]);
 
-    const jobsData  = jobsRes.data  ?? [];
-    const wkData    = workersRes.data ?? [];
-    const appsData  = (appsRes.data ?? []).map((a: Application & { jobs?: { title: string } }) => ({
-      ...a,
-      job_title: a.jobs?.title ?? "—",
-    }));
+    const appsData = appsRaw.map(a => ({ ...a, job_title: a.jobs?.title ?? "—" }));
 
     setJobs(jobsData);
     setWorkers(wkData);
@@ -49,27 +58,37 @@ export default function Admin() {
       jobs:         jobsData.length,
       workers:      wkData.length,
       applications: appsData.length,
-      pending:      wkData.filter((w: Worker) => !w.is_verified).length,
+      pending:      wkData.filter(w => !w.is_verified).length,
     });
     setLoading(false);
   }
 
   async function verifyWorker(id: string) {
-    await supabase.from("workers").update({ is_verified: true }).eq("id", id);
+    await fetch(`${SB_URL}/rest/v1/workers?id=eq.${id}`, {
+      method: "PATCH",
+      headers: sbHeaders({ "Prefer": "return=minimal" }),
+      body: JSON.stringify({ is_verified: true }),
+    });
     setWorkers(prev => prev.map(w => w.id === id ? { ...w, is_verified: true } : w));
     setStats(s => ({ ...s, pending: Math.max(0, s.pending - 1) }));
   }
 
   async function removeWorker(id: string) {
-    if (!confirm("Remove this worker?")) return;
-    await supabase.from("workers").delete().eq("id", id);
+    if (!confirm("Remove this worker? This cannot be undone.")) return;
+    await fetch(`${SB_URL}/rest/v1/workers?id=eq.${id}`, {
+      method: "DELETE",
+      headers: sbHeaders({ "Prefer": "return=minimal" }),
+    });
     setWorkers(prev => prev.filter(w => w.id !== id));
-    setStats(s => ({ ...s, workers: s.workers - 1 }));
+    setStats(s => ({ ...s, workers: s.workers - 1, pending: s.pending }));
   }
 
   async function removeJob(id: string) {
-    if (!confirm("Remove this job?")) return;
-    await supabase.from("jobs").delete().eq("id", id);
+    if (!confirm("Remove this job? This cannot be undone.")) return;
+    await fetch(`${SB_URL}/rest/v1/jobs?id=eq.${id}`, {
+      method: "DELETE",
+      headers: sbHeaders({ "Prefer": "return=minimal" }),
+    });
     setJobs(prev => prev.filter(j => j.id !== id));
     setStats(s => ({ ...s, jobs: s.jobs - 1 }));
   }
@@ -80,10 +99,10 @@ export default function Admin() {
   }
 
   const NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
-    { key: "overview",     label: "Overview",      icon: <LayoutDashboard className="h-4 w-4" /> },
-    { key: "workers",      label: "Workers",       icon: <Users            className="h-4 w-4" /> },
-    { key: "jobs",         label: "Jobs",           icon: <Briefcase        className="h-4 w-4" /> },
-    { key: "applications", label: "Applications",  icon: <FileText         className="h-4 w-4" /> },
+    { key: "overview",     label: "Overview",     icon: <LayoutDashboard className="h-4 w-4" /> },
+    { key: "workers",      label: "Workers",      icon: <Users            className="h-4 w-4" /> },
+    { key: "jobs",         label: "Jobs",         icon: <Briefcase        className="h-4 w-4" /> },
+    { key: "applications", label: "Applications", icon: <FileText         className="h-4 w-4" /> },
   ];
 
   return (
@@ -92,7 +111,10 @@ export default function Admin() {
       <aside className="w-56 shrink-0 flex flex-col" style={{ background: "#1B2E4B" }}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
           <MapPin className="h-5 w-5 text-white/80" />
-          <span className="font-serif font-bold text-white text-sm leading-tight">PieceJobs ZA<br /><span className="font-sans text-white/60 text-xs font-normal">Admin</span></span>
+          <span className="font-serif font-bold text-white text-sm leading-tight">
+            PieceJobs ZA<br />
+            <span className="font-sans text-white/60 text-xs font-normal">Admin</span>
+          </span>
         </div>
         <nav className="flex-1 py-4 space-y-1 px-3">
           {NAV.map(n => (
@@ -107,7 +129,9 @@ export default function Admin() {
             >
               {n.icon}{n.label}
               {n.key === "workers" && stats.pending > 0 && (
-                <span className="ml-auto text-xs font-bold bg-amber-400 text-amber-900 rounded-full px-1.5 py-0.5">{stats.pending}</span>
+                <span className="ml-auto text-xs font-bold bg-amber-400 text-amber-900 rounded-full px-1.5 py-0.5">
+                  {stats.pending}
+                </span>
               )}
             </button>
           ))}
@@ -135,12 +159,14 @@ export default function Admin() {
 
         <main className="flex-1 p-8">
           {loading ? (
-            <div className="space-y-4">{[1,2,3,4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
+            <div className="space-y-4">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+            </div>
           ) : (
             <>
-              {section === "overview" && <OverviewSection stats={stats} />}
-              {section === "workers"  && <WorkersSection  workers={workers}  onVerify={verifyWorker} onRemove={removeWorker} />}
-              {section === "jobs"     && <JobsSection     jobs={jobs}        onRemove={removeJob} />}
+              {section === "overview"     && <OverviewSection stats={stats} />}
+              {section === "workers"      && <WorkersSection  workers={workers}  onVerify={verifyWorker} onRemove={removeWorker} />}
+              {section === "jobs"         && <JobsSection     jobs={jobs}        onRemove={removeJob} />}
               {section === "applications" && <ApplicationsSection applications={applications} />}
             </>
           )}
@@ -163,10 +189,10 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
 function OverviewSection({ stats }: { stats: Stats }) {
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-      <StatCard label="Total Jobs Posted"       value={stats.jobs}         color="#2D7DD2" />
-      <StatCard label="Workers Registered"      value={stats.workers}      color="#1B2E4B" />
-      <StatCard label="Total Applications"      value={stats.applications} color="#10B981" />
-      <StatCard label="Pending Verifications"   value={stats.pending}      color="#F5A623" sub="Workers awaiting verification" />
+      <StatCard label="Total Jobs Posted"     value={stats.jobs}         color="#2D7DD2" />
+      <StatCard label="Workers Registered"    value={stats.workers}      color="#1B2E4B" />
+      <StatCard label="Total Applications"    value={stats.applications} color="#10B981" />
+      <StatCard label="Pending Verifications" value={stats.pending}      color="#F5A623" sub="Workers awaiting verification" />
     </div>
   );
 }
@@ -198,7 +224,9 @@ function WorkersSection({ workers, onVerify, onRemove }: {
             {workers.map(w => (
               <tr
                 key={w.id}
-                className={`border-b border-border last:border-0 transition-colors ${!w.is_verified ? "bg-amber-50/60" : "hover:bg-muted/20"}`}
+                className={`border-b border-border last:border-0 transition-colors ${
+                  !w.is_verified ? "bg-amber-50" : "hover:bg-muted/20"
+                }`}
               >
                 <td className="px-5 py-3 font-semibold text-foreground">{w.first_name} {w.last_name}</td>
                 <td className="px-5 py-3 text-muted-foreground max-w-[160px] truncate">{(w.skills ?? []).join(", ") || "—"}</td>
@@ -224,9 +252,11 @@ function WorkersSection({ workers, onVerify, onRemove }: {
                 </td>
               </tr>
             ))}
+            {workers.length === 0 && (
+              <tr><td colSpan={7} className="text-center text-muted-foreground py-12">No workers yet.</td></tr>
+            )}
           </tbody>
         </table>
-        {workers.length === 0 && <p className="text-center text-muted-foreground py-12">No workers yet.</p>}
       </div>
     </div>
   );
@@ -273,9 +303,11 @@ function JobsSection({ jobs, onRemove }: { jobs: Job[]; onRemove: (id: string) =
                 </td>
               </tr>
             ))}
+            {jobs.length === 0 && (
+              <tr><td colSpan={8} className="text-center text-muted-foreground py-12">No jobs yet.</td></tr>
+            )}
           </tbody>
         </table>
-        {jobs.length === 0 && <p className="text-center text-muted-foreground py-12">No jobs yet.</p>}
       </div>
     </div>
   );
@@ -310,9 +342,11 @@ function ApplicationsSection({ applications }: { applications: (Application & { 
                 <td className="px-5 py-3 text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-ZA")}</td>
               </tr>
             ))}
+            {applications.length === 0 && (
+              <tr><td colSpan={6} className="text-center text-muted-foreground py-12">No applications yet.</td></tr>
+            )}
           </tbody>
         </table>
-        {applications.length === 0 && <p className="text-center text-muted-foreground py-12">No applications yet.</p>}
       </div>
     </div>
   );
