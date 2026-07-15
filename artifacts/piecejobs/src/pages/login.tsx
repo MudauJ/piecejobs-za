@@ -26,8 +26,8 @@ export default function Login() {
     }
 
     if (data.user) {
-      const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
-      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const SUPABASE_URL      = "https://vnrvwfialfvduvetoewa.supabase.co";
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${data.user.id}&select=role`,
@@ -42,6 +42,7 @@ export default function Login() {
       const rows = await res.json();
       const role = rows[0]?.role as string | undefined;
 
+      console.log("[login] profile fetch raw:", JSON.stringify(rows));
       console.log("[login] profile fetch:", {
         userId: data.user.id,
         email: data.user.email,
