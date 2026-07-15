@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { supabase, CATEGORIES, CITIES } from "@/lib/supabase";
+import { CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+
+const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -52,15 +55,32 @@ export default function PostJobModal({ open, onOpenChange }: Props) {
 
   async function onSubmit(values: FormValues) {
     setSubmitting(true);
-    const { error } = await supabase.from("jobs").insert([{
-      ...values,
-      is_urgent: false,
-      status: "open",
-      posted_by: user?.id ?? null,
-    }]);
+    const r = await fetch(`${SB_URL}/rest/v1/jobs`, {
+      method: "POST",
+      headers: {
+        "apikey": SB_KEY,
+        "Authorization": `Bearer ${SB_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify({
+        title:          values.title,
+        category:       values.category,
+        description:    values.description,
+        budget:         values.budget,
+        suburb:         values.suburb,
+        city:           values.city,
+        poster_name:    values.poster_name,
+        contact_number: values.contact_number,
+        is_urgent:      false,
+        status:         "open",
+        posted_by:      user?.id ?? null,
+      }),
+    });
     setSubmitting(false);
-    if (error) {
-      toast({ title: "Error posting job", description: error.message, variant: "destructive" });
+    if (!r.ok) {
+      const msg = await r.text();
+      toast({ title: "Error posting job", description: msg, variant: "destructive" });
     } else {
       toast({ title: "Job posted!", description: "Your job is now live and workers can apply." });
       form.reset();
