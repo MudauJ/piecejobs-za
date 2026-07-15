@@ -16,12 +16,14 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+
+        {/* Logo */}
         <Link href="/" className="flex items-center gap-2 text-foreground hover:opacity-80 transition-opacity">
           <MapPin className="h-6 w-6 text-primary" />
           <span className="font-serif font-bold text-xl tracking-tight text-foreground">PieceJobs ZA</span>
         </Link>
 
-        {/* Logged out */}
+        {/* ── Logged out ── */}
         {!user && (
           <>
             <div className="hidden md:flex items-center gap-6">
@@ -32,10 +34,10 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
                 Find Workers
               </Link>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                className="hidden sm:inline-flex font-semibold"
+                variant="outline"
+                className="font-semibold"
                 onClick={() => setLocation("/login")}
               >
                 Sign In
@@ -50,18 +52,21 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
           </>
         )}
 
-        {/* Homeowner */}
+        {/* ── Homeowner ── */}
         {user && role === "homeowner" && (
           <>
             <div className="hidden md:flex items-center gap-6">
               <Link href="/jobs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 Browse Jobs
               </Link>
+              <Link href="/workers" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Find Workers
+              </Link>
               <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 My Jobs
               </Link>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold shadow-sm"
                 onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
@@ -69,47 +74,58 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
                 Post a Job
               </Button>
               <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-1.5" />Logout
+                <LogOut className="h-4 w-4 mr-1.5" />Sign Out
               </Button>
             </div>
           </>
         )}
 
-        {/* Worker */}
+        {/* ── Worker ── */}
         {user && role === "worker" && (
           <>
             <div className="hidden md:flex items-center gap-6">
               <Link href="/jobs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 Browse Jobs
               </Link>
+              <Link href="/workers" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Find Workers
+              </Link>
               <Link href="/worker-dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 My Applications
               </Link>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-1.5" />Logout
+                <LogOut className="h-4 w-4 mr-1.5" />Sign Out
               </Button>
             </div>
           </>
         )}
 
-        {/* Super admin */}
+        {/* ── Super admin ── */}
         {user && role === "super_admin" && (
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="font-semibold"
-              onClick={() => setLocation("/admin")}
-            >
-              Admin Dashboard
-            </Button>
-            <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-1.5" />Logout
-            </Button>
-          </div>
+          <>
+            <div className="hidden md:flex items-center gap-6">
+              <Link href="/jobs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Browse Jobs
+              </Link>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-semibold"
+                onClick={() => setLocation("/admin")}
+              >
+                Admin Dashboard
+              </Button>
+              <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-1.5" />Sign Out
+              </Button>
+            </div>
+          </>
         )}
+
       </div>
     </nav>
   );
