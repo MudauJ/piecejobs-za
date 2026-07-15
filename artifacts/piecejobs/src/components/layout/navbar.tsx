@@ -33,11 +33,13 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
               </Link>
             </div>
             <div className="flex items-center gap-3">
-              <Link href="/login">
-                <Button variant="ghost" className="hidden sm:inline-flex font-semibold">
-                  Sign In
-                </Button>
-              </Link>
+              <Button
+                variant="ghost"
+                className="hidden sm:inline-flex font-semibold"
+                onClick={() => setLocation("/login")}
+              >
+                Sign In
+              </Button>
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold shadow-sm"
                 onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
@@ -95,11 +97,14 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
         {/* Super admin */}
         {user && role === "super_admin" && (
           <div className="flex items-center gap-3">
-            <Link href="/admin">
-              <Button variant="outline" size="sm" className="font-semibold">
-                Admin Dashboard
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-semibold"
+              onClick={() => setLocation("/admin")}
+            >
+              Admin Dashboard
+            </Button>
             <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-1.5" />Logout
             </Button>
