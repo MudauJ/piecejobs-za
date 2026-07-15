@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job, type Worker, type Application } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ type Stats = { jobs: number; workers: number; applications: number; pending: num
 
 export default function Admin() {
   const { signOut } = useAuth();
-  const [, setLocation] = useLocation();
+  const [, setLocation] = useHashLocation();
   const [section, setSection] = useState<Section>("overview");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({ jobs: 0, workers: 0, applications: 0, pending: 0 });

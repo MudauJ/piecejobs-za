@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -47,7 +47,7 @@ function ProtectedRoute({
   requiredRole?: UserRole | UserRole[];
 }) {
   const { user, role, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [, setLocation] = useHashLocation();
 
   if (loading) return <LoadingScreen />;
 

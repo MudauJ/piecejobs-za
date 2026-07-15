@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job } from "@/lib/supabase";
 import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from "lucide-react";
 import type { ModalState } from "@/App";
@@ -31,7 +32,7 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
-  const [, setLocation] = useLocation();
+  const [, setLocation] = useHashLocation();
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

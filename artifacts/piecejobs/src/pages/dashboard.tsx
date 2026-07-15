@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job, type Application } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ type JobWithApps = Job & { applications: Application[] };
 
 export default function Dashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, profile } = useAuth();
-  const [, setLocation]    = useLocation();
+  const [, setLocation]    = useHashLocation();
   const [jobs, setJobs]    = useState<JobWithApps[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<JobWithApps | null>(null);

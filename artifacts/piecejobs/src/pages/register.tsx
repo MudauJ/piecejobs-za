@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, CATEGORIES, CITIES } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ export default function Register() {
   const [suburb, setSuburb]         = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
   const [loading, setLoading]       = useState(false);
-  const [, setLocation]             = useLocation();
+  const [, setLocation]             = useHashLocation();
   const { toast }                   = useToast();
 
   async function handleSubmit(e: React.FormEvent) {

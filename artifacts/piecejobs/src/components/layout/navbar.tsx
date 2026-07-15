@@ -1,4 +1,5 @@
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { Button } from "@/components/ui/button";
 import { MapPin, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -6,7 +7,7 @@ import type { ModalState } from "@/App";
 
 export default function Navbar({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, role, signOut } = useAuth();
-  const [, setLocation] = useLocation();
+  const [, setLocation] = useHashLocation();
 
   async function handleSignOut() {
     await signOut();
@@ -35,13 +36,9 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="font-semibold"
-                onClick={() => setLocation("/login")}
-              >
-                Sign In
-              </Button>
+              <Link href="/login">
+                <Button variant="outline" className="font-semibold">Sign In</Button>
+              </Link>
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold shadow-sm"
                 onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
@@ -111,14 +108,9 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold"
-                onClick={() => setLocation("/admin")}
-              >
-                Admin Dashboard
-              </Button>
+              <Link href="/admin">
+                <Button variant="outline" size="sm" className="font-semibold">Admin Dashboard</Button>
+              </Link>
               <Button variant="ghost" size="sm" className="font-semibold text-muted-foreground" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-1.5" />Sign Out
               </Button>
