@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
-import { type Job, type Worker, type Application } from "@/lib/supabase";
+import { type Job, type Worker, type Application, type Payment } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   LayoutDashboard, Users, Briefcase, FileText, LogOut,
-  MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2,
+  MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2, CreditCard,
 } from "lucide-react";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
@@ -26,39 +26,48 @@ async function sbGet<T>(path: string): Promise<T[]> {
   return r.ok ? r.json() : [];
 }
 
-type Section = "overview" | "workers" | "jobs" | "applications";
-type Stats = { jobs: number; workers: number; applications: number; pending: number };
+type Section = "overview" | "workers" | "jobs" | "applications" | "payments";
+type Stats = { jobs: number; workers: number; applications: number; pending: number; platformEarnings: number };
+
+type PaymentRow = Payment & { job_title?: string };
 
 export default function Admin() {
   const { signOut } = useAuth();
   const [, setLocation] = useHashLocation();
-  const [section, setSection] = useState<Section>("overview");
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<Stats>({ jobs: 0, workers: 0, applications: 0, pending: 0 });
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [section, setSection]     = useState<Section>("overview");
+  const [loading, setLoading]     = useState(true);
+  const [stats, setStats]         = useState<Stats>({ jobs: 0, workers: 0, applications: 0, pending: 0, platformEarnings: 0 });
+  const [workers, setWorkers]     = useState<Worker[]>([]);
+  const [jobs, setJobs]           = useState<Job[]>([]);
   const [applications, setApplications] = useState<(Application & { job_title?: string })[]>([]);
+  const [payments, setPayments]   = useState<PaymentRow[]>([]);
+  const [payFilter, setPayFilter] = useState<string>("all");
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const [jobsData, wkData, appsRaw] = await Promise.all([
+    const [jobsData, wkData, appsRaw, paysRaw] = await Promise.all([
       sbGet<Job>("jobs?select=*&order=created_at.desc"),
       sbGet<Worker>("workers?select=*&order=created_at.desc"),
       sbGet<Application & { jobs?: { title: string } }>("applications?select=*,jobs(title)&order=created_at.desc"),
+      sbGet<Payment & { jobs?: { title: string } }>("payments?select=*,jobs(title)&order=created_at.desc"),
     ]);
 
-    const appsData = appsRaw.map(a => ({ ...a, job_title: a.jobs?.title ?? "—" }));
+    const appsData  = appsRaw.map(a => ({ ...a, job_title: a.jobs?.title ?? "—" }));
+    const paysData  = paysRaw.map(p => ({ ...p, job_title: p.jobs?.title ?? "—" }));
+    const earnings  = paysData.filter(p => p.status === "released").reduce((s, p) => s + p.platform_fee, 0);
 
     setJobs(jobsData);
     setWorkers(wkData);
     setApplications(appsData);
+    setPayments(paysData);
     setStats({
-      jobs:         jobsData.length,
-      workers:      wkData.length,
-      applications: appsData.length,
-      pending:      wkData.filter(w => !w.is_verified).length,
+      jobs:             jobsData.length,
+      workers:          wkData.length,
+      applications:     appsData.length,
+      pending:          wkData.filter(w => !w.is_verified).length,
+      platformEarnings: earnings,
     });
     setLoading(false);
   }
@@ -80,7 +89,7 @@ export default function Admin() {
       headers: sbHeaders({ "Prefer": "return=minimal" }),
     });
     setWorkers(prev => prev.filter(w => w.id !== id));
-    setStats(s => ({ ...s, workers: s.workers - 1, pending: s.pending }));
+    setStats(s => ({ ...s, workers: s.workers - 1 }));
   }
 
   async function removeJob(id: string) {
@@ -98,11 +107,16 @@ export default function Admin() {
     setLocation("/login");
   }
 
+  const filteredPayments = payFilter === "all"
+    ? payments
+    : payments.filter(p => p.status === payFilter);
+
   const NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: "overview",     label: "Overview",     icon: <LayoutDashboard className="h-4 w-4" /> },
     { key: "workers",      label: "Workers",      icon: <Users            className="h-4 w-4" /> },
     { key: "jobs",         label: "Jobs",         icon: <Briefcase        className="h-4 w-4" /> },
     { key: "applications", label: "Applications", icon: <FileText         className="h-4 w-4" /> },
+    { key: "payments",     label: "Payments",     icon: <CreditCard       className="h-4 w-4" /> },
   ];
 
   return (
@@ -168,6 +182,15 @@ export default function Admin() {
               {section === "workers"      && <WorkersSection  workers={workers}  onVerify={verifyWorker} onRemove={removeWorker} />}
               {section === "jobs"         && <JobsSection     jobs={jobs}        onRemove={removeJob} />}
               {section === "applications" && <ApplicationsSection applications={applications} />}
+              {section === "payments"     && (
+                <PaymentsSection
+                  payments={filteredPayments}
+                  allPayments={payments}
+                  filter={payFilter}
+                  onFilter={setPayFilter}
+                  platformEarnings={stats.platformEarnings}
+                />
+              )}
             </>
           )}
         </main>
@@ -176,11 +199,13 @@ export default function Admin() {
   );
 }
 
-function StatCard({ label, value, sub, color }: { label: string; value: number; sub?: string; color: string }) {
+function StatCard({ label, value, sub, color, prefix }: { label: string; value: number | string; sub?: string; color: string; prefix?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-border p-6">
       <p className="text-sm font-semibold text-muted-foreground">{label}</p>
-      <p className="font-serif text-4xl font-extrabold mt-1" style={{ color }}>{value}</p>
+      <p className="font-serif text-4xl font-extrabold mt-1" style={{ color }}>
+        {prefix}{typeof value === "number" ? value.toLocaleString("en-ZA") : value}
+      </p>
       {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
     </div>
   );
@@ -188,11 +213,12 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
 
 function OverviewSection({ stats }: { stats: Stats }) {
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
       <StatCard label="Total Jobs Posted"     value={stats.jobs}         color="#2D7DD2" />
       <StatCard label="Workers Registered"    value={stats.workers}      color="#1B2E4B" />
       <StatCard label="Total Applications"    value={stats.applications} color="#10B981" />
       <StatCard label="Pending Verifications" value={stats.pending}      color="#F5A623" sub="Workers awaiting verification" />
+      <StatCard label="Platform Earnings"     value={stats.platformEarnings} color="#7C3AED" prefix="R" sub="From released payments" />
     </div>
   );
 }
@@ -328,6 +354,7 @@ function ApplicationsSection({ applications }: { applications: (Application & { 
               <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Phone</th>
               <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Message</th>
               <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Rate</th>
+              <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Status</th>
               <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Date</th>
             </tr>
           </thead>
@@ -339,14 +366,123 @@ function ApplicationsSection({ applications }: { applications: (Application & { 
                 <td className="px-5 py-3 text-muted-foreground">{a.worker_phone}</td>
                 <td className="px-5 py-3 text-muted-foreground max-w-[200px] truncate">{a.message}</td>
                 <td className="px-5 py-3 font-bold" style={{ color: "#F5A623" }}>R{a.proposed_rate}</td>
+                <td className="px-5 py-3">
+                  <span className={`inline-flex text-xs font-bold rounded-full px-2.5 py-1 ${
+                    a.status === "accepted" ? "bg-green-50 text-green-700 border border-green-200" :
+                    a.status === "declined" ? "bg-red-50 text-red-600 border border-red-200" :
+                    "bg-amber-50 text-amber-700 border border-amber-200"
+                  }`}>{a.status}</span>
+                </td>
                 <td className="px-5 py-3 text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-ZA")}</td>
               </tr>
             ))}
             {applications.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-muted-foreground py-12">No applications yet.</td></tr>
+              <tr><td colSpan={7} className="text-center text-muted-foreground py-12">No applications yet.</td></tr>
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarnings }: {
+  payments: PaymentRow[];
+  allPayments: PaymentRow[];
+  filter: string;
+  onFilter: (f: string) => void;
+  platformEarnings: number;
+}) {
+  const total   = allPayments.reduce((s, p) => s + p.amount, 0);
+  const held    = allPayments.filter(p => p.status === "held").reduce((s, p) => s + p.amount, 0);
+
+  const statusStyle = (s: string) => {
+    if (s === "held")     return "bg-amber-50 text-amber-700 border border-amber-200";
+    if (s === "released") return "bg-green-50 text-green-700 border border-green-200";
+    if (s === "disputed") return "bg-red-50 text-red-600 border border-red-200";
+    return "bg-muted text-muted-foreground";
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="text-sm font-semibold text-muted-foreground">Total Processed</p>
+          <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: "#1B2E4B" }}>R{total.toLocaleString("en-ZA")}</p>
+          <p className="text-xs text-muted-foreground mt-1">{allPayments.length} payment{allPayments.length !== 1 ? "s" : ""}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="text-sm font-semibold text-muted-foreground">In Escrow (held)</p>
+          <p className="font-serif text-3xl font-extrabold mt-1 text-amber-600">R{held.toLocaleString("en-ZA")}</p>
+          <p className="text-xs text-muted-foreground mt-1">{allPayments.filter(p => p.status === "held").length} active jobs</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="text-sm font-semibold text-muted-foreground">Platform Earnings</p>
+          <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: "#7C3AED" }}>R{platformEarnings.toLocaleString("en-ZA")}</p>
+          <p className="text-xs text-muted-foreground mt-1">From released payments</p>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+          <h2 className="font-serif font-bold text-lg" style={{ color: "#1B2E4B" }}>
+            Payments ({payments.length}{filter !== "all" ? ` — ${filter}` : ""})
+          </h2>
+          <div className="flex gap-2">
+            {["all", "held", "released", "disputed"].map(f => (
+              <button
+                key={f}
+                onClick={() => onFilter(f)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all capitalize ${
+                  filter === f
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-muted-foreground border-border hover:border-primary"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Job</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Homeowner</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Amount</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Platform Fee</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Worker Payout</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Payout Method</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Status</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map(p => (
+                <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-5 py-3 font-semibold text-foreground max-w-[180px] truncate">{p.job_title}</td>
+                  <td className="px-5 py-3 text-muted-foreground max-w-[140px] truncate">{p.homeowner_email ?? "—"}</td>
+                  <td className="px-5 py-3 font-bold" style={{ color: "#1B2E4B" }}>R{p.amount}</td>
+                  <td className="px-5 py-3 font-semibold text-purple-700">R{p.platform_fee}</td>
+                  <td className="px-5 py-3 font-semibold" style={{ color: "#F5A623" }}>R{p.worker_payout}</td>
+                  <td className="px-5 py-3 text-muted-foreground capitalize">{p.payout_method === "flash" ? "Flash/Kazang" : "Bank Transfer"}</td>
+                  <td className="px-5 py-3">
+                    <span className={`inline-flex text-xs font-bold rounded-full px-2.5 py-1 capitalize ${statusStyle(p.status)}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
+                </tr>
+              ))}
+              {payments.length === 0 && (
+                <tr><td colSpan={8} className="text-center text-muted-foreground py-12">No payments found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

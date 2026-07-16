@@ -1,0 +1,83 @@
+Add a full payment and escrow system to PieceJobs ZA.
+
+## PHASE 1 — DATABASE CHANGES
+Run this SQL in Supabase:
+
+CREATE TABLE IF NOT EXISTS payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID REFERENCES jobs(id),
+  homeowner_email TEXT,
+  worker_id UUID REFERENCES workers(id),
+  amount INTEGER NOT NULL,
+  platform_fee INTEGER NOT NULL,
+  worker_payout INTEGER NOT NULL,
+  payout_method TEXT DEFAULT 'bank',
+  status TEXT DEFAULT 'pending',
+  payfast_payment_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON payments TO anon, authenticated;
+
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS payout_method TEXT DEFAULT 'bank';
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS bank_name TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS bank_account TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS flash_phone TEXT;
+
+## PHASE 2 — WORKER PAYOUT PREFERENCE
+In the worker profile edit form, add a "Payout Method" section:
+- Radio buttons: "Bank Transfer" or "Cash Voucher (Flash/Kazang)"
+- If Bank Transfer: show fields for Bank Name (dropdown: Capitec, FNB, Standard Bank, Nedbank, Absa, TymeBank, Other) and Account Number
+- If Cash Voucher: show field for "Phone number for voucher delivery" with note "You will receive an SMS/WhatsApp with a code to collect cash at any Kazang till near you"
+- Save these to the workers table
+
+## PHASE 3 — PAYMENT FLOW
+When a homeowner clicks "Accept" on an application:
+
+1. Instead of immediately accepting, show a Payment Modal with:
+   - Job summary (title, worker name, agreed rate)
+   - Cost breakdown:
+     * Job Amount: R[worker's proposed rate]
+     * Platform Fee (15%): R[calculated]
+     * Total to Pay: R[job amount + 15%]
+   - Payment button: "Pay & Confirm Job" (green, prominent)
+   - Note: "Your payment is held securely until the job is complete"
+
+2. On clicking Pay: redirect to PayFast payment page using sandbox credentials:
+   - Merchant ID: 10000100
+   - Merchant Key: 46f0cd694581a
+   - Use PayFast sandbox URL: https://sandbox.payfast.co.za/eng/process
+   - Pass these fields: merchant_id, merchant_key, amount, item_name, return_url, cancel_url, notify_url
+   - return_url: https://piece-jobs-za.replit.app/#/dashboard
+   - cancel_url: https://piece-jobs-za.replit.app/#/dashboard
+   - notify_url: https://piece-jobs-za.replit.app/api/payfast-notify
+
+3. After successful payment:
+   - Set application status to 'accepted'
+   - Set job status to 'hired'
+   - Insert a record into payments table with status 'held'
+   - Send WhatsApp to worker: "Great news! Your application for [job title] has been accepted and payment is secured. Please arrive at [suburb] on the agreed time. Good luck!"
+
+## PHASE 4 — JOB COMPLETION & PAYOUT
+When homeowner clicks "Mark as Complete" on a hired job:
+
+1. Show a Rate Worker modal first (star rating 1-5 + comment)
+2. After rating submitted:
+   - Update payment status to 'released'
+   - Update job status to 'completed'
+   - If worker payout_method = 'bank': show message "Payment of R[amount] will be transferred to [bank name] within 24 hours"
+   - If worker payout_method = 'flash': show message "A Flash voucher code has been sent to [flash_phone]. The worker can collect R[amount] cash at any Kazang till."
+   - Send WhatsApp to worker with payout confirmation
+
+## PHASE 5 — ADMIN PAYMENT DASHBOARD
+In the super admin dashboard, add a "Payments" tab showing:
+- All payments with: job title, homeowner, worker, amount, platform fee, payout method, status (held/released/disputed)
+- Total platform earnings (sum of all platform fees)
+- Filter by status
+
+Use hardcoded Supabase credentials throughout:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

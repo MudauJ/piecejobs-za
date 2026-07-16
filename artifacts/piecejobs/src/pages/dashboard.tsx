@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star } from "lucide-react";
+import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star, Lock } from "lucide-react";
 import type { ModalState } from "@/App";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
@@ -25,22 +25,54 @@ function sbFetch(path: string, init?: RequestInit) {
   });
 }
 
+function submitPayFast(totalAmount: number, jobTitle: string) {
+  const BASE = "https://piece-jobs-za.replit.app";
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "https://sandbox.payfast.co.za/eng/process";
+  const fields: Record<string, string> = {
+    merchant_id:  "10000100",
+    merchant_key: "46f0cd694581a",
+    amount:       totalAmount.toFixed(2),
+    item_name:    jobTitle.slice(0, 100),
+    return_url:   `${BASE}/#/dashboard`,
+    cancel_url:   `${BASE}/#/dashboard`,
+    notify_url:   `${BASE}/api/payfast-notify`,
+  };
+  for (const [k, v] of Object.entries(fields)) {
+    const inp = document.createElement("input");
+    inp.type = "hidden"; inp.name = k; inp.value = v;
+    form.appendChild(inp);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
 type JobWithApps = Job & { applications: Application[] };
+
+type PayModal = { app: Application; job: JobWithApps } | null;
 
 type RateModal = {
   jobId: string;
   jobTitle: string;
   workerId: string;
   workerName: string;
+  workerPhone: string;
+  payoutAmount: number;
+  payoutMethod: string;
+  bankName: string;
+  flashPhone: string;
 } | null;
 
 export default function Dashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [jobs, setJobs]         = useState<JobWithApps[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [selected, setSelected] = useState<JobWithApps | null>(null);
+  const [jobs, setJobs]           = useState<JobWithApps[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [selected, setSelected]   = useState<JobWithApps | null>(null);
+  const [payModal, setPayModal]   = useState<PayModal>(null);
   const [rateModal, setRateModal] = useState<RateModal>(null);
+  const [paying, setPaying]       = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -59,8 +91,8 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
         : Promise.resolve(null),
     ]);
 
-    const fromId:   JobWithApps[] = byId.ok   ? await byId.json()         : [];
-    const fromName: JobWithApps[] = byName?.ok ? await byName.json()       : [];
+    const fromId:   JobWithApps[] = byId.ok   ? await byId.json()   : [];
+    const fromName: JobWithApps[] = byName?.ok ? await byName.json() : [];
     const seen = new Set(fromId.map(j => j.id));
     const merged = [...fromId, ...fromName.filter(j => !seen.has(j.id))];
     merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -81,25 +113,68 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     setSelected(prev => prev?.id === jobId ? { ...prev, ...patch } : prev);
   }
 
-  async function acceptApplication(app: Application) {
+  function initiatePayment(app: Application) {
+    if (!selected) return;
+    setPayModal({ app, job: selected });
+  }
+
+  async function completePayment() {
+    if (!payModal) return;
+    setPaying(true);
+    const { app, job } = payModal;
+    const jobAmount = app.proposed_rate;
+    const fee       = Math.round(jobAmount * 0.15);
+    const total     = jobAmount + fee;
+
+    let workerId: string | null = null;
+    let payoutMethod = "bank";
+    if (app.applicant_id) {
+      const wr = await sbFetch(`workers?user_id=eq.${app.applicant_id}&select=id,payout_method`);
+      if (wr.ok) {
+        const [w] = await wr.json() as { id: string; payout_method?: string }[];
+        if (w) { workerId = w.id; payoutMethod = w.payout_method ?? "bank"; }
+      }
+    }
+
+    await sbFetch("payments", {
+      method: "POST",
+      headers: { "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        job_id:          job.id,
+        homeowner_email: profile?.full_name ?? "",
+        worker_id:       workerId,
+        amount:          total,
+        platform_fee:    fee,
+        worker_payout:   jobAmount,
+        payout_method:   payoutMethod,
+        status:          "held",
+      }),
+    });
+
     await Promise.all([
       sbFetch(`applications?id=eq.${app.id}`, {
         method: "PATCH",
         headers: { "Prefer": "return=minimal" },
         body: JSON.stringify({ status: "accepted" }),
       }),
-      sbFetch(`jobs?id=eq.${selected!.id}`, {
+      sbFetch(`jobs?id=eq.${job.id}`, {
         method: "PATCH",
         headers: { "Prefer": "return=minimal" },
         body: JSON.stringify({ status: "hired" }),
       }),
     ]);
+
     patchAppLocally(app.id, { status: "accepted" });
-    patchJobLocally(selected!.id, { status: "hired" });
+    patchJobLocally(job.id, { status: "hired" });
+
     openWhatsAppMessage(
       app.worker_phone,
-      `Hi! Your application for "${selected!.title}" on PieceJobs ZA has been accepted. The homeowner will contact you shortly. Congratulations!`
+      `Great news! Your application for "${job.title}" has been accepted and payment is secured. Please arrive at ${job.suburb} on the agreed time. Good luck!`
     );
+
+    setPayModal(null);
+    setPaying(false);
+    submitPayFast(total, job.title);
   }
 
   async function declineApplication(appId: string) {
@@ -112,20 +187,42 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   }
 
   async function markComplete(job: JobWithApps) {
-    await sbFetch(`jobs?id=eq.${job.id}`, {
-      method: "PATCH",
-      headers: { "Prefer": "return=minimal" },
-      body: JSON.stringify({ status: "completed" }),
-    });
+    await Promise.all([
+      sbFetch(`jobs?id=eq.${job.id}`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ status: "completed" }),
+      }),
+      sbFetch(`payments?job_id=eq.${job.id}`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ status: "released" }),
+      }),
+    ]);
     patchJobLocally(job.id, { status: "completed" });
 
     const accepted = job.applications.find(a => a.status === "accepted");
     if (accepted?.applicant_id) {
-      const r = await sbFetch(`workers?user_id=eq.${accepted.applicant_id}&select=id,first_name,last_name`);
+      const r = await sbFetch(
+        `workers?user_id=eq.${accepted.applicant_id}&select=id,first_name,last_name,payout_method,bank_name,flash_phone`
+      );
       if (r.ok) {
-        const [worker] = await r.json() as { id: string; first_name: string; last_name: string }[];
+        const [worker] = await r.json() as {
+          id: string; first_name: string; last_name: string;
+          payout_method?: string; bank_name?: string; flash_phone?: string;
+        }[];
         if (worker) {
-          setRateModal({ jobId: job.id, jobTitle: job.title, workerId: worker.id, workerName: `${worker.first_name} ${worker.last_name}` });
+          setRateModal({
+            jobId:        job.id,
+            jobTitle:     job.title,
+            workerId:     worker.id,
+            workerName:   `${worker.first_name} ${worker.last_name}`,
+            workerPhone:  accepted.worker_phone,
+            payoutAmount: accepted.proposed_rate,
+            payoutMethod: worker.payout_method ?? "bank",
+            bankName:     worker.bank_name ?? "",
+            flashPhone:   worker.flash_phone ?? "",
+          });
           return;
         }
       }
@@ -139,8 +236,8 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
       method: "POST",
       headers: { "Prefer": "return=minimal" },
       body: JSON.stringify({
-        job_id: rateModal.jobId,
-        worker_id: rateModal.workerId,
+        job_id:         rateModal.jobId,
+        worker_id:      rateModal.workerId,
         homeowner_name: profile?.full_name ?? "Homeowner",
         rating,
         comment,
@@ -156,7 +253,19 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
         body: JSON.stringify({ rating: Math.round(avg * 10) / 10, review_count: reviews.length }),
       });
     }
-    toast({ title: "Review submitted! Thank you." });
+
+    if (rateModal.workerPhone) {
+      const payMsg = rateModal.payoutMethod === "flash"
+        ? `Great work on "${rateModal.jobTitle}"! A Flash voucher of R${rateModal.payoutAmount} has been sent to ${rateModal.flashPhone}. Collect your cash at any Kazang till. 🎉`
+        : `Great work on "${rateModal.jobTitle}"! Your payment of R${rateModal.payoutAmount} will be transferred to ${rateModal.bankName || "your bank account"} within 24 hours. 🎉`;
+      openWhatsAppMessage(rateModal.workerPhone, payMsg);
+    }
+
+    const payoutDesc = rateModal.payoutMethod === "flash"
+      ? `A Flash voucher code has been sent to ${rateModal.flashPhone}. The worker can collect R${rateModal.payoutAmount} cash at any Kazang till.`
+      : `Payment of R${rateModal.payoutAmount} will be transferred to ${rateModal.bankName || "worker's bank"} within 24 hours.`;
+
+    toast({ title: "Review submitted! Thank you.", description: payoutDesc });
     setRateModal(null);
   }
 
@@ -235,7 +344,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
                     {app.status === "pending" && (
                       <div className="flex gap-2 shrink-0">
                         {!isHired && (
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold" onClick={() => acceptApplication(app)}>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold" onClick={() => initiatePayment(app)}>
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Accept
                           </Button>
                         )}
@@ -250,6 +359,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
             </div>
           )}
         </div>
+        <PaymentModal modal={payModal} onConfirm={completePayment} onCancel={() => setPayModal(null)} paying={paying} />
         <RateWorkerModal modal={rateModal} onSubmit={submitReview} onClose={() => setRateModal(null)} />
       </div>
     );
@@ -342,14 +452,71 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   );
 }
 
+function PaymentModal({ modal, onConfirm, onCancel, paying }: {
+  modal: PayModal;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+  paying: boolean;
+}) {
+  if (!modal) return null;
+  const jobAmount = modal.app.proposed_rate;
+  const fee       = Math.round(jobAmount * 0.15);
+  const total     = jobAmount + fee;
+
+  return (
+    <Dialog open={!!modal} onOpenChange={open => !open && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl font-bold">Confirm & Pay</DialogTitle>
+          <DialogDescription>Review the payment breakdown before proceeding.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="bg-muted rounded-lg p-4 space-y-1">
+            <p className="font-bold text-foreground">{modal.job.title}</p>
+            <p className="text-sm text-muted-foreground">Worker: <strong>{modal.app.worker_name}</strong></p>
+          </div>
+          <div className="space-y-2.5 border border-border rounded-lg p-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Job Amount</span>
+              <span className="font-semibold">R{jobAmount}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Platform Fee (15%)</span>
+              <span className="font-semibold">R{fee}</span>
+            </div>
+            <div className="border-t border-border pt-2.5 flex justify-between font-bold text-base">
+              <span>Total to Pay</span>
+              <span style={{ color: "#1B2E4B" }}>R{total}</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-800">
+            <Lock className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+            <span>Your payment is held securely until the job is complete. The worker is only paid after you confirm completion.</span>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button variant="outline" className="flex-1" onClick={onCancel} disabled={paying}>Cancel</Button>
+            <Button
+              className="flex-1 font-bold bg-green-600 hover:bg-green-700 text-white"
+              onClick={onConfirm}
+              disabled={paying}
+            >
+              {paying ? "Processing…" : "Pay & Confirm Job"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RateWorkerModal({ modal, onSubmit, onClose }: {
   modal: RateModal;
   onSubmit: (rating: number, comment: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [rating, setRating]   = useState(0);
-  const [hovered, setHovered] = useState(0);
-  const [comment, setComment] = useState("");
+  const [rating, setRating]         = useState(0);
+  const [hovered, setHovered]       = useState(0);
+  const [comment, setComment]       = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {

@@ -41,6 +41,24 @@ export type Worker = {
   review_count: number;
   created_at: string;
   user_id?: string;
+  payout_method?: string;
+  bank_name?: string;
+  bank_account?: string;
+  flash_phone?: string;
+};
+
+export type Payment = {
+  id: string;
+  job_id: string;
+  homeowner_email?: string;
+  worker_id?: string;
+  amount: number;
+  platform_fee: number;
+  worker_payout: number;
+  payout_method: string;
+  status: string;
+  payfast_payment_id?: string;
+  created_at: string;
 };
 
 export type Application = {

@@ -24,10 +24,14 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [editing, setEditing]   = useState(false);
   const [saving, setSaving]     = useState(false);
 
-  const [editSuburb, setEditSuburb] = useState("");
-  const [editCity, setEditCity]     = useState("");
-  const [editRate, setEditRate]     = useState("");
-  const [editSkills, setEditSkills] = useState<string[]>([]);
+  const [editSuburb, setEditSuburb]           = useState("");
+  const [editCity, setEditCity]               = useState("");
+  const [editRate, setEditRate]               = useState("");
+  const [editSkills, setEditSkills]           = useState<string[]>([]);
+  const [editPayoutMethod, setEditPayoutMethod] = useState("bank");
+  const [editBankName, setEditBankName]         = useState("");
+  const [editBankAccount, setEditBankAccount]   = useState("");
+  const [editFlashPhone, setEditFlashPhone]     = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -88,6 +92,10 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     setEditCity(worker.city);
     setEditRate(String(worker.hourly_rate));
     setEditSkills([...(worker.skills ?? [])]);
+    setEditPayoutMethod(worker.payout_method ?? "bank");
+    setEditBankName(worker.bank_name ?? "");
+    setEditBankAccount(worker.bank_account ?? "");
+    setEditFlashPhone(worker.flash_phone ?? "");
     setEditing(true);
   }
 
@@ -96,7 +104,16 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     setSaving(true);
     const { data } = await supabase
       .from("workers")
-      .update({ suburb: editSuburb, city: editCity, hourly_rate: Number(editRate) || 0, skills: editSkills })
+      .update({
+        suburb:        editSuburb,
+        city:          editCity,
+        hourly_rate:   Number(editRate) || 0,
+        skills:        editSkills,
+        payout_method: editPayoutMethod,
+        bank_name:     editPayoutMethod === "bank"  ? editBankName    : null,
+        bank_account:  editPayoutMethod === "bank"  ? editBankAccount : null,
+        flash_phone:   editPayoutMethod === "flash" ? editFlashPhone  : null,
+      })
       .eq("id", worker.id)
       .select()
       .single();
@@ -222,6 +239,54 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                             ))}
                           </div>
                         </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">Payout Method</label>
+                          <div className="flex gap-3">
+                            {[
+                              { value: "bank",  label: "Bank Transfer" },
+                              { value: "flash", label: "Cash Voucher (Flash/Kazang)" },
+                            ].map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setEditPayoutMethod(opt.value)}
+                                className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg border transition-all ${
+                                  editPayoutMethod === opt.value
+                                    ? "bg-primary text-white border-primary"
+                                    : "bg-white text-foreground border-border hover:border-primary"
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {editPayoutMethod === "bank" && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-semibold mb-1.5">Bank Name</label>
+                              <Select value={editBankName} onValueChange={setEditBankName}>
+                                <SelectTrigger className="h-10"><SelectValue placeholder="Select bank" /></SelectTrigger>
+                                <SelectContent>
+                                  {["Capitec", "FNB", "Standard Bank", "Nedbank", "Absa", "TymeBank", "Other"].map(b => (
+                                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold mb-1.5">Account Number</label>
+                              <Input className="h-10" value={editBankAccount} onChange={e => setEditBankAccount(e.target.value)} placeholder="Account number" />
+                            </div>
+                          </div>
+                        )}
+                        {editPayoutMethod === "flash" && (
+                          <div>
+                            <label className="block text-sm font-semibold mb-1.5">Phone number for voucher delivery</label>
+                            <Input className="h-10" value={editFlashPhone} onChange={e => setEditFlashPhone(e.target.value)} placeholder="082 123 4567" />
+                            <p className="text-xs text-muted-foreground mt-1.5">You will receive an SMS/WhatsApp with a code to collect cash at any Kazang till near you.</p>
+                          </div>
+                        )}
                         <div className="flex gap-3 pt-2">
                           <Button onClick={saveEdit} disabled={saving} className="font-bold" style={{ background: "#2D7DD2" }}>
                             <Save className="h-3.5 w-3.5 mr-1.5" />{saving ? "Saving..." : "Save changes"}
@@ -250,6 +315,22 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                               {worker.skills.map(s => (
                                 <span key={s} className="text-sm font-medium px-3 py-1 rounded-full bg-primary/10 text-primary">{s}</span>
                               ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="col-span-2 border-t border-border pt-5">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">Payout Method</p>
+                          {!worker.payout_method || worker.payout_method === "bank" ? (
+                            <div className="text-sm">
+                              <span className="font-semibold">Bank Transfer</span>
+                              {worker.bank_name && <span className="text-muted-foreground"> — {worker.bank_name}</span>}
+                              {worker.bank_account && <span className="text-muted-foreground"> •••• {worker.bank_account.slice(-4)}</span>}
+                              {!worker.bank_name && <p className="text-muted-foreground mt-0.5">No bank details saved yet. Click Edit to add.</p>}
+                            </div>
+                          ) : (
+                            <div className="text-sm">
+                              <span className="font-semibold">Cash Voucher (Flash/Kazang)</span>
+                              {worker.flash_phone && <span className="text-muted-foreground"> — {worker.flash_phone}</span>}
                             </div>
                           )}
                         </div>
