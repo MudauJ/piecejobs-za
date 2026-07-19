@@ -8,6 +8,9 @@ import {
   LayoutDashboard, Users, Briefcase, FileText, LogOut,
   MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2, CreditCard,
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -28,8 +31,7 @@ async function sbGet<T>(path: string): Promise<T[]> {
 
 type Section = "overview" | "workers" | "jobs" | "applications" | "payments";
 type Stats = { jobs: number; workers: number; applications: number; pending: number; platformEarnings: number };
-
-type PaymentRow = Payment & { job_title?: string };
+type PaymentRow = Payment & { job_title?: string; job_city?: string };
 
 export default function Admin() {
   const { signOut } = useAuth();
@@ -41,7 +43,6 @@ export default function Admin() {
   const [jobs, setJobs]           = useState<Job[]>([]);
   const [applications, setApplications] = useState<(Application & { job_title?: string })[]>([]);
   const [payments, setPayments]   = useState<PaymentRow[]>([]);
-  const [payFilter, setPayFilter] = useState<string>("all");
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -51,11 +52,11 @@ export default function Admin() {
       sbGet<Job>("jobs?select=*&order=created_at.desc"),
       sbGet<Worker>("workers?select=*&order=created_at.desc"),
       sbGet<Application & { jobs?: { title: string } }>("applications?select=*,jobs(title)&order=created_at.desc"),
-      sbGet<Payment & { jobs?: { title: string } }>("payments?select=*,jobs(title)&order=created_at.desc"),
+      sbGet<Payment & { jobs?: { title: string; city: string } }>("payments?select=*,jobs(title,city)&order=created_at.desc"),
     ]);
 
     const appsData  = appsRaw.map(a => ({ ...a, job_title: a.jobs?.title ?? "—" }));
-    const paysData  = paysRaw.map(p => ({ ...p, job_title: p.jobs?.title ?? "—" }));
+    const paysData  = paysRaw.map(p => ({ ...p, job_title: p.jobs?.title ?? "—", job_city: p.jobs?.city ?? "" }));
     const earnings  = paysData.filter(p => p.status === "released").reduce((s, p) => s + p.platform_fee, 0);
 
     setJobs(jobsData);
@@ -107,10 +108,6 @@ export default function Admin() {
     setLocation("/login");
   }
 
-  const filteredPayments = payFilter === "all"
-    ? payments
-    : payments.filter(p => p.status === payFilter);
-
   const NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: "overview",     label: "Overview",     icon: <LayoutDashboard className="h-4 w-4" /> },
     { key: "workers",      label: "Workers",      icon: <Users            className="h-4 w-4" /> },
@@ -121,7 +118,6 @@ export default function Admin() {
 
   return (
     <div className="flex min-h-screen" style={{ background: "#F1F5F9" }}>
-      {/* Sidebar */}
       <aside className="w-56 shrink-0 flex flex-col" style={{ background: "#1B2E4B" }}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
           <MapPin className="h-5 w-5 text-white/80" />
@@ -160,7 +156,6 @@ export default function Admin() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white border-b border-border px-8 py-4 flex items-center justify-between">
           <h1 className="font-serif font-bold text-xl" style={{ color: "#1B2E4B" }}>
@@ -182,15 +177,7 @@ export default function Admin() {
               {section === "workers"      && <WorkersSection  workers={workers}  onVerify={verifyWorker} onRemove={removeWorker} />}
               {section === "jobs"         && <JobsSection     jobs={jobs}        onRemove={removeJob} />}
               {section === "applications" && <ApplicationsSection applications={applications} />}
-              {section === "payments"     && (
-                <PaymentsSection
-                  payments={filteredPayments}
-                  allPayments={payments}
-                  filter={payFilter}
-                  onFilter={setPayFilter}
-                  platformEarnings={stats.platformEarnings}
-                />
-              )}
+              {section === "payments"     && <PaymentsSection payments={payments} />}
             </>
           )}
         </main>
@@ -386,15 +373,67 @@ function ApplicationsSection({ applications }: { applications: (Application & { 
   );
 }
 
-function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarnings }: {
-  payments: PaymentRow[];
-  allPayments: PaymentRow[];
-  filter: string;
-  onFilter: (f: string) => void;
-  platformEarnings: number;
-}) {
-  const total   = allPayments.reduce((s, p) => s + p.amount, 0);
-  const held    = allPayments.filter(p => p.status === "held").reduce((s, p) => s + p.amount, 0);
+function PaymentsSection({ payments }: { payments: PaymentRow[] }) {
+  const now        = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart  = new Date(now.getFullYear(), 0, 1);
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [cityFilter,   setCityFilter]   = useState("all");
+  const [dateFrom,     setDateFrom]     = useState("");
+  const [dateTo,       setDateTo]       = useState("");
+
+  const released = payments.filter(p => p.status === "released");
+
+  const totalProcessed    = payments.reduce((s, p) => s + p.amount, 0);
+  const inEscrow          = payments.filter(p => p.status === "held").reduce((s, p) => s + p.amount, 0);
+  const releasedToWorkers = released.reduce((s, p) => s + p.worker_payout, 0);
+  const platformEarnings  = released.reduce((s, p) => s + p.platform_fee, 0);
+  const thisMonthRevenue  = released.filter(p => new Date(p.created_at) >= monthStart).reduce((s, p) => s + p.platform_fee, 0);
+  const thisYearRevenue   = released.filter(p => new Date(p.created_at) >= yearStart).reduce((s, p) => s + p.platform_fee, 0);
+
+  const revenueChart = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+    const revenue = released
+      .filter(p => {
+        const pd = new Date(p.created_at);
+        return pd.getFullYear() === d.getFullYear() && pd.getMonth() === d.getMonth();
+      })
+      .reduce((s, p) => s + p.platform_fee, 0);
+    return { month: monthNames[d.getMonth()], revenue };
+  });
+
+  const workerMap = new Map<string, { name: string; total: number }>();
+  released.forEach(p => {
+    const key = p.worker_id ?? "unknown";
+    const existing = workerMap.get(key);
+    workerMap.set(key, { name: key, total: (existing?.total ?? 0) + p.worker_payout });
+  });
+  const topWorkers = Array.from(workerMap.entries())
+    .map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const homeownerMap = new Map<string, number>();
+  payments.forEach(p => {
+    const k = p.homeowner_email ?? "Unknown";
+    homeownerMap.set(k, (homeownerMap.get(k) ?? 0) + p.amount);
+  });
+  const topHomeowners = Array.from(homeownerMap.entries())
+    .map(([name, total]) => ({ name, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const cities = Array.from(new Set(payments.map(p => p.job_city).filter(Boolean)));
+
+  const filtered = payments.filter(p => {
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (cityFilter   !== "all" && p.job_city !== cityFilter) return false;
+    if (dateFrom && new Date(p.created_at) < new Date(dateFrom)) return false;
+    if (dateTo   && new Date(p.created_at) > new Date(dateTo + "T23:59:59")) return false;
+    return true;
+  });
 
   const statusStyle = (s: string) => {
     if (s === "held")     return "bg-amber-50 text-amber-700 border border-amber-200";
@@ -406,44 +445,128 @@ function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarn
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid sm:grid-cols-3 gap-5">
-        <div className="bg-white rounded-2xl border border-border p-6">
-          <p className="text-sm font-semibold text-muted-foreground">Total Processed</p>
-          <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: "#1B2E4B" }}>R{total.toLocaleString("en-ZA")}</p>
-          <p className="text-xs text-muted-foreground mt-1">{allPayments.length} payment{allPayments.length !== 1 ? "s" : ""}</p>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {[
+          { label: "Total Processed",      value: totalProcessed,    color: "#1B2E4B" },
+          { label: "In Escrow (Held)",     value: inEscrow,          color: "#F5A623" },
+          { label: "Released to Workers",  value: releasedToWorkers, color: "#10B981" },
+          { label: "Platform Earnings",    value: platformEarnings,  color: "#7C3AED" },
+          { label: "This Month's Revenue", value: thisMonthRevenue,  color: "#2D7DD2" },
+          { label: "This Year's Revenue",  value: thisYearRevenue,   color: "#EF4444" },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-2xl border border-border p-6">
+            <p className="text-sm font-semibold text-muted-foreground">{s.label}</p>
+            <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: s.color }}>R{s.value.toLocaleString("en-ZA")}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Revenue chart */}
+      <div className="bg-white rounded-2xl border border-border p-6">
+        <h3 className="font-serif font-bold text-lg mb-5" style={{ color: "#1B2E4B" }}>Platform Revenue — Last 12 Months</h3>
+        {revenueChart.every(d => d.revenue === 0) ? (
+          <p className="text-sm text-muted-foreground text-center py-10">No revenue data yet.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={revenueChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={v => `R${v}`} tick={{ fontSize: 11 }} width={65} />
+              <Tooltip formatter={(v: number) => [`R${v.toLocaleString("en-ZA")}`, "Revenue"]} />
+              <Line type="monotone" dataKey="revenue" stroke="#7C3AED" strokeWidth={2.5} dot={{ r: 4, fill: "#7C3AED" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Top workers & homeowners */}
+      <div className="grid md:grid-cols-2 gap-5">
+        <div className="bg-white rounded-2xl border border-border overflow-hidden">
+          <div className="px-6 py-4 border-b border-border">
+            <h3 className="font-serif font-bold text-base" style={{ color: "#1B2E4B" }}>Top 5 Workers by Earnings</h3>
+          </div>
+          {topWorkers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No data yet.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {topWorkers.map((w, i) => (
+                <div key={w.id} className="flex items-center justify-between px-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                    <span className="text-sm font-semibold text-muted-foreground truncate max-w-[180px]">{w.name}</span>
+                  </div>
+                  <span className="font-bold text-sm" style={{ color: "#2D7DD2" }}>R{w.total.toLocaleString("en-ZA")}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="bg-white rounded-2xl border border-border p-6">
-          <p className="text-sm font-semibold text-muted-foreground">In Escrow (held)</p>
-          <p className="font-serif text-3xl font-extrabold mt-1 text-amber-600">R{held.toLocaleString("en-ZA")}</p>
-          <p className="text-xs text-muted-foreground mt-1">{allPayments.filter(p => p.status === "held").length} active jobs</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-border p-6">
-          <p className="text-sm font-semibold text-muted-foreground">Platform Earnings</p>
-          <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: "#7C3AED" }}>R{platformEarnings.toLocaleString("en-ZA")}</p>
-          <p className="text-xs text-muted-foreground mt-1">From released payments</p>
+        <div className="bg-white rounded-2xl border border-border overflow-hidden">
+          <div className="px-6 py-4 border-b border-border">
+            <h3 className="font-serif font-bold text-base" style={{ color: "#1B2E4B" }}>Top 5 Homeowners by Spend</h3>
+          </div>
+          {topHomeowners.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No data yet.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {topHomeowners.map((h, i) => (
+                <div key={h.name} className="flex items-center justify-between px-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                    <span className="text-sm font-semibold text-muted-foreground truncate max-w-[180px]">{h.name}</span>
+                  </div>
+                  <span className="font-bold text-sm" style={{ color: "#F5A623" }}>R{h.total.toLocaleString("en-ZA")}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filter bar */}
+      {/* Transactions table with filters */}
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
-          <h2 className="font-serif font-bold text-lg" style={{ color: "#1B2E4B" }}>
-            Payments ({payments.length}{filter !== "all" ? ` — ${filter}` : ""})
-          </h2>
-          <div className="flex gap-2">
-            {["all", "held", "released", "disputed"].map(f => (
-              <button
-                key={f}
-                onClick={() => onFilter(f)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all capitalize ${
-                  filter === f
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-muted-foreground border-border hover:border-primary"
-                }`}
+        <div className="px-6 py-4 border-b border-border space-y-3">
+          <h3 className="font-serif font-bold text-lg" style={{ color: "#1B2E4B" }}>
+            Transactions ({filtered.length}{filtered.length !== payments.length ? ` of ${payments.length}` : ""})
+          </h3>
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* Status filter */}
+            <div className="flex gap-1.5">
+              {["all","held","released","disputed"].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setStatusFilter(f)}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all capitalize ${
+                    statusFilter === f ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"
+                  }`}
+                >{f}</button>
+              ))}
+            </div>
+            {/* City filter */}
+            {cities.length > 0 && (
+              <select
+                value={cityFilter}
+                onChange={e => setCityFilter(e.target.value)}
+                className="text-xs font-semibold border border-border rounded-lg px-3 py-1.5 bg-white text-foreground focus:outline-none focus:border-primary"
               >
-                {f}
-              </button>
-            ))}
+                <option value="all">All Cities</option>
+                {cities.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            {/* Date range */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="border border-border rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-primary" />
+              <span>–</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="border border-border rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-primary" />
+            </div>
+            {(statusFilter !== "all" || cityFilter !== "all" || dateFrom || dateTo) && (
+              <button
+                onClick={() => { setStatusFilter("all"); setCityFilter("all"); setDateFrom(""); setDateTo(""); }}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >Clear filters</button>
+            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -451,6 +574,7 @@ function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarn
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Job</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground">City</th>
                 <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Homeowner</th>
                 <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Amount</th>
                 <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Platform Fee</th>
@@ -461,10 +585,11 @@ function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarn
               </tr>
             </thead>
             <tbody>
-              {payments.map(p => (
+              {filtered.map(p => (
                 <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                  <td className="px-5 py-3 font-semibold text-foreground max-w-[180px] truncate">{p.job_title}</td>
-                  <td className="px-5 py-3 text-muted-foreground max-w-[140px] truncate">{p.homeowner_email ?? "—"}</td>
+                  <td className="px-5 py-3 font-semibold text-foreground max-w-[160px] truncate">{p.job_title}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{p.job_city || "—"}</td>
+                  <td className="px-5 py-3 text-muted-foreground max-w-[120px] truncate">{p.homeowner_email ?? "—"}</td>
                   <td className="px-5 py-3 font-bold" style={{ color: "#1B2E4B" }}>R{p.amount}</td>
                   <td className="px-5 py-3 font-semibold text-purple-700">R{p.platform_fee}</td>
                   <td className="px-5 py-3 font-semibold" style={{ color: "#F5A623" }}>R{p.worker_payout}</td>
@@ -477,8 +602,8 @@ function PaymentsSection({ payments, allPayments, filter, onFilter, platformEarn
                   <td className="px-5 py-3 text-muted-foreground">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
                 </tr>
               ))}
-              {payments.length === 0 && (
-                <tr><td colSpan={8} className="text-center text-muted-foreground py-12">No payments found.</td></tr>
+              {filtered.length === 0 && (
+                <tr><td colSpan={9} className="text-center text-muted-foreground py-12">No payments match the selected filters.</td></tr>
               )}
             </tbody>
           </table>

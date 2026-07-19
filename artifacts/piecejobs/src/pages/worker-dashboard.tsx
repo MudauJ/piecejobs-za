@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
-import { supabase, type Worker, type Job, type Application, CATEGORIES, CITIES } from "@/lib/supabase";
+import { supabase, type Worker, type Job, type Application, type Payment, CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -8,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
 import type { ModalState } from "@/App";
 
-type Tab = "profile" | "applications" | "jobs";
+type Tab = "profile" | "applications" | "jobs" | "earnings";
 type AppWithJob = Application & { job_title?: string; job_suburb?: string; job_city?: string };
+type EarningRow = Payment & { job_title?: string; job_suburb?: string; job_city?: string; job_category?: string };
 
 export default function WorkerDashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, profile }       = useAuth();
@@ -20,6 +24,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [worker, setWorker]     = useState<Worker | null>(null);
   const [applications, setApplications] = useState<AppWithJob[]>([]);
   const [matchingJobs, setMatchingJobs] = useState<Job[]>([]);
+  const [earnings, setEarnings]         = useState<EarningRow[]>([]);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -83,6 +88,23 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
       : await query;
     setMatchingJobs(jData ?? []);
 
+    if (w) {
+      const epRes = await fetch(
+        `${SB_URL}/rest/v1/payments?worker_id=eq.${w.id}&select=*,jobs(title,suburb,city,category)&order=created_at.desc`,
+        { headers },
+      );
+      if (epRes.ok) {
+        const ep = await epRes.json() as (Payment & { jobs?: { title?: string; suburb?: string; city?: string; category?: string } })[];
+        setEarnings(ep.map(p => ({
+          ...p,
+          job_title:    p.jobs?.title    ?? "—",
+          job_suburb:   p.jobs?.suburb   ?? "",
+          job_city:     p.jobs?.city     ?? "",
+          job_category: p.jobs?.category ?? "",
+        })));
+      }
+    }
+
     setLoading(false);
   }
 
@@ -132,6 +154,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     { key: "profile",      label: "My Profile",      icon: <MapPin       className="h-4 w-4" /> },
     { key: "applications", label: "My Applications", icon: <Briefcase    className="h-4 w-4" /> },
     { key: "jobs",         label: "Available Jobs",  icon: <CheckCircle2 className="h-4 w-4" /> },
+    { key: "earnings",     label: "My Earnings",     icon: <TrendingUp   className="h-4 w-4" /> },
   ];
 
   return (
@@ -392,6 +415,11 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
               </div>
             )}
 
+            {/* EARNINGS TAB */}
+            {tab === "earnings" && (
+              <EarningsTab earnings={earnings} />
+            )}
+
             {/* JOBS TAB */}
             {tab === "jobs" && (
               <div className="space-y-4">
@@ -433,6 +461,131 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
               </div>
             )}
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EarningsTab({ earnings }: { earnings: EarningRow[] }) {
+  const now       = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const weekStart  = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
+
+  const released = earnings.filter(p => p.status === "released");
+  const totalEarned   = released.reduce((s, p) => s + p.worker_payout, 0);
+  const thisMonth     = released.filter(p => new Date(p.created_at) >= monthStart).reduce((s, p) => s + p.worker_payout, 0);
+  const thisWeek      = released.filter(p => new Date(p.created_at) >= weekStart).reduce((s, p) => s + p.worker_payout, 0);
+  const pending       = earnings.filter(p => p.status === "held").reduce((s, p) => s + p.worker_payout, 0);
+
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const chartData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const total = released
+      .filter(p => {
+        const pd = new Date(p.created_at);
+        return pd.getFullYear() === d.getFullYear() && pd.getMonth() === d.getMonth();
+      })
+      .reduce((s, p) => s + p.worker_payout, 0);
+    return { month: monthNames[d.getMonth()], earned: total };
+  });
+
+  const stats = [
+    { label: "Total Earned",  value: totalEarned, color: "#2D7DD2", prefix: "R" },
+    { label: "This Month",    value: thisMonth,   color: "#10B981", prefix: "R" },
+    { label: "This Week",     value: thisWeek,    color: "#7C3AED", prefix: "R" },
+    { label: "Pending Payout",value: pending,     color: "#F5A623", prefix: "R" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {stats.map(s => (
+          <div key={s.label} className="bg-white rounded-2xl border border-border p-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{s.label}</p>
+            <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: s.color }}>{s.prefix}{s.value.toLocaleString("en-ZA")}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-border p-6">
+        <h3 className="font-serif font-bold text-lg mb-5" style={{ color: "#1B2E4B" }}>Earnings — Last 6 Months</h3>
+        {chartData.every(d => d.earned === 0) ? (
+          <p className="text-sm text-muted-foreground text-center py-10">No earnings data yet.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={v => `R${v}`} tick={{ fontSize: 11 }} width={60} />
+              <Tooltip formatter={(v: number) => [`R${v.toLocaleString("en-ZA")}`, "Earned"]} />
+              <Bar dataKey="earned" fill="#2D7DD2" radius={[4,4,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
+          <h3 className="font-serif font-bold text-lg" style={{ color: "#1B2E4B" }}>Completed Jobs ({released.length})</h3>
+        </div>
+        {released.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-4xl mb-3">💰</p>
+            <p className="font-semibold text-foreground">No earnings yet</p>
+            <p className="text-sm text-muted-foreground mt-1">Complete a job to see your earnings here.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Job</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Location</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Date</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Earned</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {released.map(p => (
+                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                    <td className="px-5 py-3 font-semibold text-foreground max-w-[200px] truncate">{p.job_title}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{[p.job_suburb, p.job_city].filter(Boolean).join(", ") || "—"}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
+                    <td className="px-5 py-3 font-bold" style={{ color: "#2D7DD2" }}>R{p.worker_payout.toLocaleString("en-ZA")}</td>
+                    <td className="px-5 py-3">
+                      <span className="inline-flex text-xs font-bold rounded-full px-2.5 py-1 bg-green-50 text-green-700 border border-green-200">Paid</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {earnings.filter(p => p.status === "held").length > 0 && (
+          <div className="border-t border-border">
+            <div className="px-6 py-3 bg-amber-50">
+              <p className="text-xs font-semibold text-amber-700">Pending payments ({earnings.filter(p => p.status === "held").length})</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {earnings.filter(p => p.status === "held").map(p => (
+                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                      <td className="px-5 py-3 font-semibold text-foreground max-w-[200px] truncate">{p.job_title}</td>
+                      <td className="px-5 py-3 text-muted-foreground">{[p.job_suburb, p.job_city].filter(Boolean).join(", ") || "—"}</td>
+                      <td className="px-5 py-3 text-muted-foreground">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
+                      <td className="px-5 py-3 font-bold text-amber-600">R{p.worker_payout.toLocaleString("en-ZA")}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex text-xs font-bold rounded-full px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200">In Escrow</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
     </div>

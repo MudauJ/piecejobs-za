@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { type Job, type Application } from "@/lib/supabase";
+import { type Job, type Application, type Payment } from "@/lib/supabase";
 import { openWhatsAppMessage } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star, Lock } from "lucide-react";
+import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star, Lock, Wallet, Briefcase } from "lucide-react";
 import type { ModalState } from "@/App";
+import {
+  PieChart, Pie, Cell, Tooltip as RTooltip, Legend, ResponsiveContainer,
+} from "recharts";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -49,8 +52,9 @@ function submitPayFast(totalAmount: number, jobTitle: string) {
 }
 
 type JobWithApps = Job & { applications: Application[] };
-
 type PayModal = { app: Application; job: JobWithApps } | null;
+type DashTab = "jobs" | "spending";
+type SpendRow = Payment & { job_title?: string; job_category?: string; worker_name?: string };
 
 type RateModal = {
   jobId: string;
@@ -73,11 +77,37 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   const [payModal, setPayModal]   = useState<PayModal>(null);
   const [rateModal, setRateModal] = useState<RateModal>(null);
   const [paying, setPaying]       = useState(false);
+  const [dashTab, setDashTab]     = useState<DashTab>("jobs");
+  const [spending, setSpending]   = useState<SpendRow[]>([]);
+  const [spendLoading, setSpendLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     fetchJobs();
+    fetchSpending();
   }, [user]);
+
+  async function fetchSpending() {
+    if (!user) return;
+    setSpendLoading(true);
+    const nameEnc = encodeURIComponent(profile?.full_name ?? "");
+    const [byId, byName] = await Promise.all([
+      sbFetch(`payments?select=*,jobs(title,category,suburb,city)&order=created_at.desc`),
+      nameEnc ? sbFetch(`payments?homeowner_email=eq.${nameEnc}&select=*,jobs(title,category,suburb,city)&order=created_at.desc`) : Promise.resolve(null),
+    ]);
+    const raw1 = byId.ok   ? await byId.json()   as (Payment & { jobs?: { title?: string; category?: string; suburb?: string; city?: string } })[] : [];
+    const raw2 = byName?.ok ? await byName.json() as (Payment & { jobs?: { title?: string; category?: string; suburb?: string; city?: string } })[] : [];
+    const uid = user!.id;
+    const filtered1 = raw1.filter((p: SpendRow) => (p as SpendRow & { homeowner_email?: string }).homeowner_email === uid || (p as SpendRow & { homeowner_email?: string }).homeowner_email === profile?.full_name);
+    const seen = new Set(filtered1.map((p: Payment) => p.id));
+    const merged = [...filtered1, ...raw2.filter((p: Payment) => !seen.has(p.id))];
+    setSpending(merged.map(p => ({
+      ...p,
+      job_title:    p.jobs?.title    ?? "—",
+      job_category: p.jobs?.category ?? "—",
+    })));
+    setSpendLoading(false);
+  }
 
   async function fetchJobs() {
     setLoading(true);
@@ -371,35 +401,60 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
       <div className="bg-white border-b border-border">
         <div className="container mx-auto px-6 py-8 flex items-start justify-between">
           <div>
-            <h1 className="font-serif text-4xl font-bold" style={{ color: "#1B2E4B" }}>My Jobs</h1>
+            <h1 className="font-serif text-4xl font-bold" style={{ color: "#1B2E4B" }}>My Dashboard</h1>
             <p className="text-muted-foreground mt-1">Welcome back, {profile?.full_name?.split(" ")[0] ?? "there"} 👋</p>
           </div>
-          <Button
-            className="font-bold text-base px-5 h-11"
-            style={{ background: "#F5A623", color: "#1B2E4B" }}
-            onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
-          >
-            <PlusCircle className="h-4 w-4 mr-2" />Post a Job
-          </Button>
+          {dashTab === "jobs" && (
+            <Button
+              className="font-bold text-base px-5 h-11"
+              style={{ background: "#F5A623", color: "#1B2E4B" }}
+              onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />Post a Job
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="container mx-auto px-6 py-8">
-        {loading ? (
-          <div className="space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-2xl" />)}</div>
-        ) : jobs.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-2xl border border-dashed border-border">
-            <p className="text-5xl mb-4">📋</p>
-            <p className="font-semibold text-foreground mb-2">No jobs posted yet</p>
-            <p className="text-muted-foreground text-sm mb-6">Post your first job and get applications from local workers.</p>
-            <Button style={{ background: "#F5A623", color: "#1B2E4B" }} className="font-bold"
-              onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}>
-              Post your first job
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {jobs.map(job => (
+        {/* Tabs */}
+        <div className="flex gap-1 mb-8 bg-white rounded-xl p-1 border border-border w-fit">
+          {([
+            { key: "jobs",     label: "My Jobs",      icon: <Briefcase className="h-4 w-4" /> },
+            { key: "spending", label: "My Spending",  icon: <Wallet    className="h-4 w-4" /> },
+          ] as { key: DashTab; label: string; icon: React.ReactNode }[]).map(t => (
+            <button
+              key={t.key}
+              onClick={() => setDashTab(t.key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                dashTab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+
+        {dashTab === "spending" && (
+          <SpendingTab spending={spending} loading={spendLoading} />
+        )}
+
+        {dashTab === "jobs" && (
+          loading ? (
+            <div className="space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-2xl" />)}</div>
+          ) : jobs.length === 0 ? (
+            <div className="text-center py-24 bg-white rounded-2xl border border-dashed border-border">
+              <p className="text-5xl mb-4">📋</p>
+              <p className="font-semibold text-foreground mb-2">No jobs posted yet</p>
+              <p className="text-muted-foreground text-sm mb-6">Post your first job and get applications from local workers.</p>
+              <Button style={{ background: "#F5A623", color: "#1B2E4B" }} className="font-bold"
+                onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}>
+                Post your first job
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {jobs.map(job => (
               <div
                 key={job.id}
                 className="bg-white border border-border rounded-2xl p-6 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer"
@@ -445,9 +500,117 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
               </div>
             ))}
           </div>
+          )
         )}
       </div>
       <RateWorkerModal modal={rateModal} onSubmit={submitReview} onClose={() => setRateModal(null)} />
+    </div>
+  );
+}
+
+const PIE_COLORS = ["#2D7DD2","#F5A623","#10B981","#7C3AED","#EF4444","#F59E0B","#06B6D4","#84CC16"];
+
+function SpendingTab({ spending, loading }: { spending: SpendRow[]; loading: boolean }) {
+  const now        = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const released = spending.filter(p => p.status === "released");
+  const totalSpent  = released.reduce((s, p) => s + p.amount, 0);
+  const thisMonth   = released.filter(p => new Date(p.created_at) >= monthStart).reduce((s, p) => s + p.amount, 0);
+  const jobsCompleted = released.length;
+  const avgCost     = jobsCompleted > 0 ? Math.round(totalSpent / jobsCompleted) : 0;
+
+  const catMap = new Map<string, number>();
+  released.forEach(p => {
+    const cat = p.job_category ?? "Other";
+    catMap.set(cat, (catMap.get(cat) ?? 0) + p.amount);
+  });
+  const pieData = Array.from(catMap.entries()).map(([name, value]) => ({ name, value }));
+
+  const stats = [
+    { label: "Total Spent",     value: totalSpent,    color: "#1B2E4B", prefix: "R" },
+    { label: "This Month",      value: thisMonth,     color: "#2D7DD2", prefix: "R" },
+    { label: "Jobs Completed",  value: jobsCompleted, color: "#10B981" },
+    { label: "Average Job Cost",value: avgCost,       color: "#F5A623", prefix: "R" },
+  ];
+
+  if (loading) return (
+    <div className="space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}</div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {stats.map(s => (
+          <div key={s.label} className="bg-white rounded-2xl border border-border p-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{s.label}</p>
+            <p className="font-serif text-3xl font-extrabold mt-1" style={{ color: s.color }}>
+              {s.prefix}{typeof s.value === "number" ? s.value.toLocaleString("en-ZA") : s.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {pieData.length > 0 && (
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <h3 className="font-serif font-bold text-lg mb-4" style={{ color: "#1B2E4B" }}>Spending by Category</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
+                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+              </Pie>
+              <RTooltip formatter={(v: number) => [`R${v.toLocaleString("en-ZA")}`, "Spent"]} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
+          <h3 className="font-serif font-bold text-lg" style={{ color: "#1B2E4B" }}>Payment History ({spending.length})</h3>
+        </div>
+        {spending.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-4xl mb-3">💳</p>
+            <p className="font-semibold text-foreground">No payments yet</p>
+            <p className="text-sm text-muted-foreground mt-1">Your payment history will appear here once you hire a worker.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Job</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Category</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Amount Paid</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Platform Fee</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Date</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {spending.map(p => (
+                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                    <td className="px-5 py-3 font-semibold text-foreground max-w-[200px] truncate">{p.job_title}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{p.job_category ?? "—"}</td>
+                    <td className="px-5 py-3 font-bold" style={{ color: "#1B2E4B" }}>R{p.amount.toLocaleString("en-ZA")}</td>
+                    <td className="px-5 py-3 text-purple-700 font-semibold">R{p.platform_fee.toLocaleString("en-ZA")}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex text-xs font-bold rounded-full px-2.5 py-1 ${
+                        p.status === "released" ? "bg-green-50 text-green-700 border border-green-200" :
+                        p.status === "held"     ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                        "bg-red-50 text-red-600 border border-red-200"
+                      }`}>{p.status === "released" ? "Paid" : p.status === "held" ? "In Escrow" : p.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
