@@ -29,10 +29,10 @@ function submitPayFast(totalAmount: number, jobTitle: string) {
   const BASE = "https://piece-jobs-za.replit.app";
   const form = document.createElement("form");
   form.method = "POST";
-  form.action = "https://www.payfast.co.za/eng/process";
+  form.action = "https://sandbox.payfast.co.za/eng/process";
   const fields: Record<string, string> = {
-    merchant_id:  "36255333",
-    merchant_key: "r1xwmkq8ihjbc",
+    merchant_id:  "10000100",
+    merchant_key: "46f0cd694581a",
     amount:       totalAmount.toFixed(2),
     item_name:    jobTitle.slice(0, 100),
     return_url:   `${BASE}/#/dashboard`,
