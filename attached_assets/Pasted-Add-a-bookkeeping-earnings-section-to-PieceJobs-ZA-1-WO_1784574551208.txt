@@ -1,0 +1,68 @@
+Add a bookkeeping/earnings section to PieceJobs ZA.
+
+## 1. WORKER EARNINGS DASHBOARD
+Add a new "My Earnings" tab to the worker dashboard (/worker-dashboard).
+
+This tab shows:
+- Stats row at top:
+  * Total Earned (all time) — sum of worker_payout from payments table where worker matches and status = 'released'
+  * This Month — same filter but created_at within current month
+  * This Week — same filter but created_at within current week
+  * Pending — sum of worker_payout where status = 'held'
+
+- Earnings chart: a simple bar chart showing earnings per month for the last 6 months (use recharts BarChart)
+
+- Completed Jobs list: table showing each completed job with:
+  * Job title
+  * Homeowner suburb/city
+  * Date completed
+  * Amount earned (worker_payout)
+  * Status badge (Paid/Pending)
+
+## 2. HOMEOWNER SPENDING DASHBOARD
+Add a "My Spending" tab to the homeowner dashboard (/dashboard).
+
+This tab shows:
+- Stats row:
+  * Total Spent (all time)
+  * This Month
+  * Jobs Completed
+  * Average Job Cost
+
+- Spending by category: pie chart showing spend breakdown by job category (use recharts PieChart)
+
+- Payment history table:
+  * Job title
+  * Category
+  * Worker name
+  * Amount paid
+  * Platform fee
+  * Date
+  * Status
+
+## 3. ADMIN BOOKKEEPING — enhance existing Payments tab
+Update the admin Payments tab to show:
+
+- Summary cards at top:
+  * Total Processed (all payments)
+  * In Escrow (held payments)
+  * Released to Workers
+  * Platform Earnings (sum of platform_fee)
+  * This Month's Revenue
+  * This Year's Revenue
+
+- Revenue chart: line chart showing platform earnings per month for last 12 months
+
+- Top 5 Workers by earnings
+- Top 5 Homeowners by spend
+
+- Detailed transaction table with filters (by status, by date range, by city)
+
+## IMPORTANT
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Use recharts for all charts (already installed). Keep the navy/blue/amber design system consistent.
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.
