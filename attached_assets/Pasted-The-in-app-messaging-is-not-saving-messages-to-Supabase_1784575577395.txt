@@ -1,0 +1,45 @@
+The in-app messaging is not saving messages to Supabase. The messages table exists and has RLS disabled but nothing is being inserted when users send messages.
+
+Fix the send message function to use this exact fetch pattern:
+
+const sendMessage = async (jobId, senderName, senderRole, message) => {
+  const response = await fetch(
+    'https://vnrvwfialfvduvetoewa.supabase.co/rest/v1/messages',
+    {
+      method: 'POST',
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        job_id: jobId,
+        sender_name: senderName,
+        sender_role: senderRole,
+        message: message
+      })
+    }
+  );
+  console.log('Message send status:', response.status);
+  return response.status === 201;
+};
+
+Also fix the fetch messages function to use the same pattern:
+
+const fetchMessages = async (jobId) => {
+  const response = await fetch(
+    `https://vnrvwfialfvduvetoewa.supabase.co/rest/v1/messages?job_id=eq.${jobId}&order=created_at.asc`,
+    {
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w'
+      }
+    }
+  );
+  const data = await response.json();
+  console.log('Fetched messages:', data);
+  return data;
+};
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish.

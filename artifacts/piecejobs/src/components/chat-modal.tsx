@@ -5,13 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Send } from "lucide-react";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
-
-const SB_HEADERS = {
-  "apikey":        SB_KEY,
-  "Authorization": `Bearer ${SB_KEY}`,
-  "Content-Type":  "application/json",
-};
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 
 type Message = {
   id: string;
@@ -39,14 +33,17 @@ export function ChatModal({ open, onClose, jobId, jobTitle, senderName, senderRo
   const intervalRef               = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchMessages() {
-    const r = await fetch(
+    const response = await fetch(
       `${SB_URL}/rest/v1/messages?job_id=eq.${jobId}&order=created_at.asc`,
-      { headers: SB_HEADERS },
+      {
+        headers: {
+          "apikey":        SB_ANON,
+          "Authorization": `Bearer ${SB_ANON}`,
+        },
+      },
     );
-    if (r.ok) {
-      const data: Message[] = await r.json();
-      setMessages(data);
-    }
+    const data = await response.json();
+    if (Array.isArray(data)) setMessages(data as Message[]);
   }
 
   useEffect(() => {
@@ -66,18 +63,29 @@ export function ChatModal({ open, onClose, jobId, jobTitle, senderName, senderRo
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
-    await fetch(`${SB_URL}/rest/v1/messages`, {
-      method:  "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
-      body:    JSON.stringify({
-        job_id:      jobId,
-        sender_name: senderName,
-        sender_role: senderRole,
-        message:     text,
-      }),
-    });
-    setDraft("");
-    await fetchMessages();
+    const response = await fetch(
+      `${SB_URL}/rest/v1/messages`,
+      {
+        method: "POST",
+        headers: {
+          "apikey":        SB_ANON,
+          "Authorization": `Bearer ${SB_ANON}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=minimal",
+        },
+        body: JSON.stringify({
+          job_id:      jobId,
+          sender_name: senderName,
+          sender_role: senderRole,
+          message:     text,
+        }),
+      },
+    );
+    console.log("Message send status:", response.status);
+    if (response.status === 201) {
+      setDraft("");
+      await fetchMessages();
+    }
     setSending(false);
   }
 
