@@ -41,7 +41,7 @@ export default function Navbar({ setModalState }: { setModalState: React.Dispatc
               </Link>
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold shadow-sm"
-                onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
+                onClick={() => setLocation("/register")}
               >
                 Post a Job
               </Button>

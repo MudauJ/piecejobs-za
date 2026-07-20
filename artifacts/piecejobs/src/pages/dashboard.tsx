@@ -92,17 +92,20 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   async function fetchSpending() {
     if (!user) return;
     setSpendLoading(true);
+    const uid     = user.id;
     const nameEnc = encodeURIComponent(profile?.full_name ?? "");
-    const [byId, byName] = await Promise.all([
-      sbFetch(`payments?select=*,jobs(title,category,suburb,city)&order=created_at.desc`),
-      nameEnc ? sbFetch(`payments?homeowner_email=eq.${nameEnc}&select=*,jobs(title,category,suburb,city)&order=created_at.desc`) : Promise.resolve(null),
+    type PRow = Payment & { jobs?: { title?: string; category?: string } };
+    const [byUid, byName] = await Promise.all([
+      sbFetch(`payments?homeowner_id=eq.${uid}&select=*,jobs(title,category)&order=created_at.desc`),
+      nameEnc
+        ? sbFetch(`payments?homeowner_email=eq.${nameEnc}&select=*,jobs(title,category)&order=created_at.desc`)
+        : Promise.resolve(null),
     ]);
-    const raw1 = byId.ok   ? await byId.json()   as (Payment & { jobs?: { title?: string; category?: string; suburb?: string; city?: string } })[] : [];
-    const raw2 = byName?.ok ? await byName.json() as (Payment & { jobs?: { title?: string; category?: string; suburb?: string; city?: string } })[] : [];
-    const uid = user!.id;
-    const filtered1 = raw1.filter((p: SpendRow) => (p as SpendRow & { homeowner_email?: string }).homeowner_email === uid || (p as SpendRow & { homeowner_email?: string }).homeowner_email === profile?.full_name);
-    const seen = new Set(filtered1.map((p: Payment) => p.id));
-    const merged = [...filtered1, ...raw2.filter((p: Payment) => !seen.has(p.id))];
+    const fromUid:  PRow[] = byUid.ok   ? await byUid.json()  : [];
+    const fromName: PRow[] = byName?.ok ? await byName.json() : [];
+    const seen    = new Set(fromUid.map(p => p.id));
+    const merged  = [...fromUid, ...fromName.filter(p => !seen.has(p.id))];
+    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     setSpending(merged.map(p => ({
       ...p,
       job_title:    p.jobs?.title    ?? "—",
@@ -174,6 +177,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
       body: JSON.stringify({
         job_id:          job.id,
         homeowner_email: profile?.full_name ?? "",
+        homeowner_id:    user!.id,
         worker_id:       workerId,
         amount:          total,
         platform_fee:    fee,

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { openWhatsAppMessage } from "@/lib/whatsapp";
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, MapPin, Banknote, MessageCircle } from "lucide-react";
+import { Loader2, MapPin, Banknote, Lock } from "lucide-react";
 
 const schema = z.object({
   worker_name: z.string().min(2, "Your name is required"),
@@ -31,8 +32,9 @@ interface Props {
 }
 
 export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useHashLocation();
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
 
@@ -52,7 +54,7 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
   });
 
   async function onSubmit(values: FormValues) {
-    if (!jobId || !job) return;
+    if (!jobId || !job || !user || role !== "worker") return;
     setSubmitting(true);
     const r = await fetch(`${SB_URL}/rest/v1/applications`, {
       method: "POST",
@@ -66,7 +68,7 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
         ...values,
         job_id:       jobId,
         status:       "pending",
-        applicant_id: user?.id ?? null,
+        applicant_id: user.id,
       }),
     });
     setSubmitting(false);
@@ -87,6 +89,8 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
     }
   }
 
+  const isBlocked = !user || role !== "worker";
+
   return (
     <Dialog open={!!jobId} onOpenChange={(open) => !open && onOpenChange(false)}>
       <DialogContent className="max-w-lg" data-testid="modal-apply-job">
@@ -95,69 +99,99 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
           <DialogDescription>Send your application to the homeowner.</DialogDescription>
         </DialogHeader>
 
-        {job && (
-          <div className="bg-muted rounded-lg p-4 border border-border space-y-1">
-            <p className="font-bold text-foreground text-base">{job.title}</p>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{job.suburb}, {job.city}</span>
-              <span className="flex items-center gap-1"><Banknote className="h-3.5 w-3.5" />Budget: <strong className="text-foreground">R{job.budget}</strong></span>
+        {isBlocked ? (
+          <div className="py-8 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Lock className="h-6 w-6 text-primary" />
             </div>
+            {!user ? (
+              <>
+                <p className="font-bold text-foreground text-lg">Worker account required</p>
+                <p className="text-muted-foreground text-sm max-w-xs">
+                  Only worker accounts can apply for jobs — create one to continue.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                  <Button
+                    className="font-bold bg-primary hover:bg-primary/90 text-white"
+                    onClick={() => { onOpenChange(false); setLocation("/register"); }}
+                  >
+                    Create Worker Account
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-bold text-foreground text-lg">Not available for homeowners</p>
+                <p className="text-muted-foreground text-sm max-w-xs">
+                  Only worker accounts can apply for jobs — your account is registered as a homeowner.
+                </p>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+              </>
+            )}
           </div>
+        ) : (
+          <>
+            {job && (
+              <div className="bg-muted rounded-lg p-4 border border-border space-y-1">
+                <p className="font-bold text-foreground text-base">{job.title}</p>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{job.suburb}, {job.city}</span>
+                  <span className="flex items-center gap-1"><Banknote className="h-3.5 w-3.5" />Budget: <strong className="text-foreground">R{job.budget}</strong></span>
+                </div>
+              </div>
+            )}
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="worker_name" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Your Name</FormLabel>
+                      <FormControl><Input placeholder="Full name" data-testid="input-applicant-name" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="worker_phone" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number</FormLabel>
+                      <FormControl><Input placeholder="082 123 4567" data-testid="input-applicant-phone" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+
+                <FormField control={form.control} name="message" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Message to Homeowner</FormLabel>
+                    <FormControl><Textarea placeholder="Introduce yourself — mention your experience, availability, and why you're a good fit..." rows={3} data-testid="textarea-application-message" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="proposed_rate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Proposed Rate (ZAR total)</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R</span>
+                        <Input type="number" className="pl-7" placeholder="350" data-testid="input-proposed-rate" {...field} />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <div className="flex gap-3 pt-1">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
+                  <Button type="submit" className="flex-1 font-bold" disabled={submitting} data-testid="button-apply-submit">
+                    {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending...</> : "Send Application"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </>
         )}
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="worker_name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Your Name</FormLabel>
-                  <FormControl><Input placeholder="Full name" data-testid="input-applicant-name" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="worker_phone" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
-                  <FormControl><Input placeholder="082 123 4567" data-testid="input-applicant-phone" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            <FormField control={form.control} name="message" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Message to Homeowner</FormLabel>
-                <FormControl><Textarea placeholder="Introduce yourself — mention your experience, availability, and why you're a good fit..." rows={3} data-testid="textarea-application-message" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="proposed_rate" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Your Proposed Rate (ZAR total)</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R</span>
-                    <Input type="number" className="pl-7" placeholder="350" data-testid="input-proposed-rate" {...field} />
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2.5 text-xs text-green-800">
-              <MessageCircle className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
-              <span>After submitting, WhatsApp will open so you can message the homeowner directly — no account needed.</span>
-            </div>
-
-            <div className="flex gap-3 pt-1">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" className="flex-1 font-bold" disabled={submitting} data-testid="button-apply-submit">
-                {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending...</> : "Send Application"}
-              </Button>
-            </div>
-          </form>
-        </Form>
       </DialogContent>
     </Dialog>
   );

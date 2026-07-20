@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job, CATEGORIES, CITIES } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +32,8 @@ function timeAgo(dateStr: string) {
 }
 
 export default function Jobs({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
+  const { user, role } = useAuth();
+  const [, setLocation] = useHashLocation();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -87,14 +91,19 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                 {openJobs.length > 0 ? `${openJobs.length} open piece job${openJobs.length !== 1 ? "s" : ""} across South Africa` : "Find piece jobs in your area"}
               </p>
             </div>
-            <Button
-              onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
-              className="font-bold shadow-sm text-base px-6 h-11"
-              style={{ background: "#F5A623", color: "#1B2E4B" }}
-              data-testid="button-post-job"
-            >
-              + Post a Job
-            </Button>
+            {role !== "worker" && (
+              <Button
+                onClick={() => {
+                  if (!user || role !== "homeowner") { setLocation("/register"); return; }
+                  setModalState(prev => ({ ...prev, postJob: true }));
+                }}
+                className="font-bold shadow-sm text-base px-6 h-11"
+                style={{ background: "#F5A623", color: "#1B2E4B" }}
+                data-testid="button-post-job"
+              >
+                + Post a Job
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -253,21 +262,24 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                         <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Budget</p>
                         <p className="font-serif text-3xl font-extrabold" style={{ color: "#1B2E4B" }}>R{job.budget}</p>
                       </div>
-                      {job.status === "open" ? (
+                      {job.status === "open" && role !== "homeowner" ? (
                         <Button
-                          onClick={() => setModalState(prev => ({ ...prev, applyJob: job.id }))}
+                          onClick={() => {
+                            if (!user || role !== "worker") { setLocation("/register"); return; }
+                            setModalState(prev => ({ ...prev, applyJob: job.id }));
+                          }}
                           className="font-bold shadow-sm px-6 h-11 bg-primary hover:bg-primary/90 text-white"
                           data-testid={`button-apply-${job.id}`}
                         >
                           Apply Now
                         </Button>
-                      ) : (
+                      ) : job.status !== "open" ? (
                         <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
                           job.status === "hired" ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"
                         }`}>
                           {job.status === "hired" ? "Position Filled" : "Completed"}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>

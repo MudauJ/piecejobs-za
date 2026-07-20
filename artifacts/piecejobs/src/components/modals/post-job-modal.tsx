@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Link } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { CATEGORIES, CITIES } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -13,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 
 const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
@@ -35,7 +38,9 @@ interface Props {
 }
 
 export default function PostJobModal({ open, onOpenChange, userId }: Props) {
+  const { user, role } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useHashLocation();
   const [submitting, setSubmitting] = useState(false);
 
   const form = useForm<FormValues>({
@@ -53,6 +58,7 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
   });
 
   async function onSubmit(values: FormValues) {
+    if (!user || role !== "homeowner") return;
     setSubmitting(true);
     const r = await fetch(`${SB_URL}/rest/v1/jobs`, {
       method: "POST",
@@ -87,6 +93,8 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
     }
   }
 
+  const isBlocked = !user || role !== "homeowner";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="modal-post-job">
@@ -95,109 +103,143 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
           <DialogDescription>Describe what you need done and local workers will apply.</DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-            <FormField control={form.control} name="title" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Job Title</FormLabel>
-                <FormControl><Input placeholder="e.g. Full house cleaning — 3 bedrooms" data-testid="input-job-title" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="category" render={({ field }) => (
+        {isBlocked ? (
+          <div className="py-8 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+              <Lock className="h-6 w-6 text-amber-600" />
+            </div>
+            {!user ? (
+              <>
+                <p className="font-bold text-foreground text-lg">Homeowner account required</p>
+                <p className="text-muted-foreground text-sm max-w-xs">
+                  Only homeowner accounts can post jobs — create one to continue.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                  <Button
+                    className="font-bold"
+                    style={{ background: "#F5A623", color: "#1B2E4B" }}
+                    onClick={() => { onOpenChange(false); setLocation("/register"); }}
+                  >
+                    Create Homeowner Account
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-bold text-foreground text-lg">Not available for workers</p>
+                <p className="text-muted-foreground text-sm max-w-xs">
+                  Only homeowner accounts can post jobs. Your account is registered as a worker.
+                </p>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+              <FormField control={form.control} name="title" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormLabel>Job Title</FormLabel>
+                  <FormControl><Input placeholder="e.g. Full house cleaning — 3 bedrooms" data-testid="input-job-title" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="category" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="budget" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Budget (ZAR)</FormLabel>
                     <FormControl>
-                      <SelectTrigger data-testid="select-category">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R</span>
+                        <Input type="number" className="pl-7" placeholder="350" data-testid="input-budget" {...field} />
+                      </div>
                     </FormControl>
-                    <SelectContent>
-                      {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
 
-              <FormField control={form.control} name="budget" render={({ field }) => (
+              <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Budget (ZAR)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R</span>
-                      <Input type="number" className="pl-7" placeholder="350" data-testid="input-budget" {...field} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl><Textarea placeholder="Describe the job in detail — what needs doing, any special requirements, how long it might take..." rows={4} data-testid="textarea-description" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="suburb" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Suburb</FormLabel>
-                  <FormControl><Input placeholder="e.g. Sandton" data-testid="input-suburb" {...field} /></FormControl>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl><Textarea placeholder="Describe the job in detail — what needs doing, any special requirements, how long it might take..." rows={4} data-testid="textarea-description" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
 
-              <FormField control={form.control} name="city" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>City</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-city">
-                        <SelectValue placeholder="Select city" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {CITIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="suburb" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Suburb</FormLabel>
+                    <FormControl><Input placeholder="e.g. Sandton" data-testid="input-suburb" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="poster_name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Your Name</FormLabel>
-                  <FormControl><Input placeholder="e.g. Michael" data-testid="input-poster-name" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                <FormField control={form.control} name="city" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-city">
+                          <SelectValue placeholder="Select city" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CITIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
 
-              <FormField control={form.control} name="contact_number" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact Number</FormLabel>
-                  <FormControl><Input placeholder="e.g. 082 123 4567" data-testid="input-contact-number" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="poster_name" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Name</FormLabel>
+                    <FormControl><Input placeholder="e.g. Michael" data-testid="input-poster-name" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
 
-            <div className="flex gap-3 pt-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-bold" disabled={submitting} data-testid="button-post-job-submit">
-                {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Posting...</> : "Post Job"}
-              </Button>
-            </div>
-          </form>
-        </Form>
+                <FormField control={form.control} name="contact_number" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Number</FormLabel>
+                    <FormControl><Input placeholder="e.g. 082 123 4567" data-testid="input-contact-number" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
+                <Button type="submit" className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-bold" disabled={submitting} data-testid="button-post-job-submit">
+                  {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Posting...</> : "Post Job"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from "lucide-react";
 import type { ModalState } from "@/App";
 
@@ -28,6 +29,7 @@ function timeAgo(dateStr: string) {
 }
 
 export default function Landing({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
+  const { user, role } = useAuth();
   const [liveJobs, setLiveJobs] = useState<Job[]>([]);
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({});
@@ -213,14 +215,19 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
                   )}
                 </div>
                 <div className="px-5 py-3 bg-muted/30 border-t border-border">
-                  <Button
-                    onClick={() => setModalState(prev => ({ ...prev, postJob: true }))}
-                    className="w-full h-9 text-sm font-bold text-white"
-                    style={{ background: "#F5A623", color: "#1B2E4B" }}
-                    data-testid="button-card-post-job"
-                  >
-                    + Post your job
-                  </Button>
+                  {role !== "worker" && (
+                    <Button
+                      onClick={() => {
+                        if (!user || role !== "homeowner") { setLocation("/register"); return; }
+                        setModalState(prev => ({ ...prev, postJob: true }));
+                      }}
+                      className="w-full h-9 text-sm font-bold text-white"
+                      style={{ background: "#F5A623", color: "#1B2E4B" }}
+                      data-testid="button-card-post-job"
+                    >
+                      + Post your job
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

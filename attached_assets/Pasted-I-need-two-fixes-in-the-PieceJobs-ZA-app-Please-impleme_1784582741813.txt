@@ -1,0 +1,20 @@
+I need two fixes in the PieceJobs ZA app. Please implement both.
+Fix 1 — "My Spending" tab shows nothing / potential data leak
+In the homeowner dashboard's spending fetch (the function that loads payment history for the "My Spending" tab), the query currently fetches the entire payments table with no WHERE/eq filter, then tries to filter client-side by matching a column called homeowner_email against the logged-in user's ID or name. The bug: homeowner_email is actually populated with the homeowner's full_name when a payment is created (not their email, not their user ID), so the ID-based match never works, name-based matching is fragile if two homeowners share a name, and pulling every homeowner's payment rows to the browser before filtering is both a performance problem and a data exposure risk since the anon Supabase key is public in the bundled JS.
+Please fix this properly:
+
+Add a homeowner_id column (uuid, references the user/auth id) to the payments table if it doesn't already exist.
+Update the payment-creation code (wherever a payment record gets inserted when a homeowner accepts and pays an application) to write homeowner_id: user.id alongside the existing fields.
+Update the "My Spending" fetch to filter server-side with payments?homeowner_id=eq.<the logged-in user's id> instead of fetching everything and filtering client-side.
+Leave the worker "My Earnings" fetch alone — it already filters correctly server-side by worker_id.
+If there are existing payment rows in the table, backfill homeowner_id for them where possible by matching homeowner_email to a user's full_name in user_profiles, so historical data doesn't disappear from My Spending.
+
+Fix 2 — Post a Job / Apply Now need to be role-gated (like Uber's separate driver/rider apps)
+Right now, on the public "Available Jobs" page and in the navbar, both "+ Post a Job" and "Apply Now" are shown and clickable to any user regardless of account type — including logged-out visitors. Posting doesn't require login at all, and applying works with just a name/phone, no account needed. I want strict separation:
+
+Posting a job must be restricted to logged-in homeowner accounts only. Workers should never see a "Post a Job" button anywhere (jobs page, navbar, landing page card). If a worker is somehow routed to the post-job flow, block it. If a visitor isn't logged in at all, clicking "Post a Job" should send them to the registration page (pre-selecting the homeowner role if the signup form supports that) instead of opening the post-job form directly — a job posting must always be tied to a real homeowner account so it shows up correctly in that homeowner's spending history.
+Applying to a job must be restricted to logged-in worker accounts only. Homeowners should never see or be able to use "Apply Now". If a visitor isn't logged in, clicking "Apply Now" should send them to registration (pre-selecting the worker role) instead of opening the apply form directly — same reasoning, an application must be tied to a real worker account so it shows up correctly in that worker's earnings and applications.
+Please add this check in the actual modal/form components too (not just hide the buttons), so there's no way to trigger either flow while logged in as the wrong role or logged out, even via a direct link or leftover UI state.
+Where blocked, show a clear toast/message like "Only homeowner accounts can post jobs — create one to continue" / "Only worker accounts can apply — create one to continue."
+
+After both fixes, please have me test: (1) posting a job as a homeowner still works and a worker account no longer sees the option, (2) applying as a worker still works and a homeowner account no longer sees the option, (3) completing a sandbox PayFast payment and confirming it now shows up correctly in that homeowner's My Spending tab.
