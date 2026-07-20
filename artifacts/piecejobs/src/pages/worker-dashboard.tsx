@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
+import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp, MessageCircle } from "lucide-react";
 import type { ModalState } from "@/App";
+import { ChatModal } from "@/components/chat-modal";
 
 type Tab = "profile" | "applications" | "jobs" | "earnings";
 type AppWithJob = Application & { job_title?: string; job_suburb?: string; job_city?: string };
@@ -25,6 +26,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [applications, setApplications] = useState<AppWithJob[]>([]);
   const [matchingJobs, setMatchingJobs] = useState<Job[]>([]);
   const [earnings, setEarnings]         = useState<EarningRow[]>([]);
+  const [chatJob, setChatJob]           = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -403,8 +405,18 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                     </div>
 
                     {app.status === "accepted" && (
-                      <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm font-semibold text-green-800">
-                        🎉 You got the job! Contact the homeowner to confirm details.
+                      <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 space-y-3">
+                        <p className="text-sm font-semibold text-green-800">
+                          🎉 You got the job! Message the homeowner directly using the button below — all communication is kept secure inside PieceJobs ZA.
+                        </p>
+                        <Button
+                          size="sm"
+                          className="font-bold text-white"
+                          style={{ background: "#2D7DD2" }}
+                          onClick={() => setChatJob({ jobId: app.job_id, jobTitle: app.job_title ?? "Job" })}
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 mr-1.5" />Message Homeowner
+                        </Button>
                       </div>
                     )}
                     {app.status === "declined" && (
@@ -463,6 +475,16 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
           </>
         )}
       </div>
+      {chatJob && worker && (
+        <ChatModal
+          open={!!chatJob}
+          onClose={() => setChatJob(null)}
+          jobId={chatJob.jobId}
+          jobTitle={chatJob.jobTitle}
+          senderName={`${worker.first_name} ${worker.last_name}`}
+          senderRole="worker"
+        />
+      )}
     </div>
   );
 }

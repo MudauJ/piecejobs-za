@@ -7,8 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star, Lock, Wallet, Briefcase } from "lucide-react";
+import { ArrowLeft, Users, Clock, CheckCircle2, XCircle, PlusCircle, Star, Lock, Wallet, Briefcase, MessageCircle } from "lucide-react";
 import type { ModalState } from "@/App";
+import { ChatModal } from "@/components/chat-modal";
 import {
   PieChart, Pie, Cell, Tooltip as RTooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -80,6 +81,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   const [dashTab, setDashTab]     = useState<DashTab>("jobs");
   const [spending, setSpending]   = useState<SpendRow[]>([]);
   const [spendLoading, setSpendLoading] = useState(false);
+  const [chatJob, setChatJob]     = useState<{ jobId: string; jobTitle: string; workerName: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -383,6 +385,16 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
                         </Button>
                       </div>
                     )}
+                    {app.status === "accepted" && (
+                      <Button
+                        size="sm"
+                        className="font-bold shrink-0 text-white"
+                        style={{ background: "#2D7DD2" }}
+                        onClick={() => setChatJob({ jobId: selected!.id, jobTitle: selected!.title, workerName: app.worker_name ?? "Worker" })}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5 mr-1.5" />Message Worker
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -391,6 +403,16 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
         </div>
         <PaymentModal modal={payModal} onConfirm={completePayment} onCancel={() => setPayModal(null)} paying={paying} />
         <RateWorkerModal modal={rateModal} onSubmit={submitReview} onClose={() => setRateModal(null)} />
+        {chatJob && (
+          <ChatModal
+            open={!!chatJob}
+            onClose={() => setChatJob(null)}
+            jobId={chatJob.jobId}
+            jobTitle={chatJob.jobTitle}
+            senderName={profile?.full_name ?? "Homeowner"}
+            senderRole="homeowner"
+          />
+        )}
       </div>
     );
   }

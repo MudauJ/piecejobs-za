@@ -1,0 +1,49 @@
+Add in-app messaging to PieceJobs ZA for accepted jobs.
+
+## DATABASE
+Run this SQL in Supabase first:
+
+CREATE TABLE IF NOT EXISTS messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID REFERENCES jobs(id),
+  sender_name TEXT NOT NULL,
+  sender_role TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON messages TO anon, authenticated;
+
+## MESSAGING FEATURE
+
+1. In the WORKER DASHBOARD — My Applications tab:
+When an application status is 'accepted', show a "Message Homeowner" button below the job card.
+Clicking it opens a chat modal showing:
+- Job title at the top
+- Message thread (all messages for that job_id)
+- Text input at bottom with Send button
+- Messages show sender name, message, and time
+- Homeowner messages on the left, worker messages on the right
+- Auto-refresh every 10 seconds to show new messages
+
+2. In the HOMEOWNER DASHBOARD — when viewing applications for a hired job:
+Show a "Message Worker" button next to the accepted application.
+Same chat modal as above.
+
+3. Chat modal design:
+- Clean WhatsApp-style layout
+- Worker messages: blue bubble on right
+- Homeowner messages: grey bubble on left  
+- Show sender name above each bubble
+- Timestamp below each bubble
+- "Send" button in amber/orange
+- Modal header shows job title and "Secure Job Chat"
+
+4. Replace the text "Contact the homeowner to confirm details" with "Message the homeowner directly using the button below — all communication is kept secure inside PieceJobs ZA"
+
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.
