@@ -8,14 +8,21 @@ import { ShieldCheck, Star, CreditCard, MapPin, ArrowRight, Search, Flame } from
 import type { ModalState } from "@/App";
 
 const CATEGORY_META: Record<string, { emoji: string }> = {
-  "Cleaning":      { emoji: "🧹" },
-  "Garden":        { emoji: "🌿" },
-  "Laundry":       { emoji: "👕" },
-  "Plumbing":      { emoji: "🔧" },
-  "Painting":      { emoji: "🖌️" },
-  "Grass cutting": { emoji: "✂️" },
-  "Dishwashing":   { emoji: "🍽️" },
-  "Moving":        { emoji: "📦" },
+  "Cleaning":          { emoji: "🧹" },
+  "Garden":            { emoji: "🌿" },
+  "Laundry":           { emoji: "👕" },
+  "Plumbing":          { emoji: "🔧" },
+  "Painting":          { emoji: "🖌️" },
+  "Grass cutting":     { emoji: "✂️" },
+  "Dishwashing":       { emoji: "🍽️" },
+  "Moving":            { emoji: "📦" },
+  "Braai Setup":       { emoji: "🔥" },
+  "Car Wash":          { emoji: "🚗" },
+  "Dog Walking":       { emoji: "🐕" },
+  "Tutoring":          { emoji: "📚" },
+  "Pool Cleaning":     { emoji: "🏊" },
+  "Tiling & Grouting": { emoji: "🪟" },
+  "Electrical (minor)":{ emoji: "⚡" },
 };
 
 const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
@@ -23,7 +30,9 @@ const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
 const SKILL_RATES: Record<string, number> = {
   "Cleaning": 80, "Garden": 70, "Laundry": 60, "Plumbing": 150,
   "Painting": 120, "Grass cutting": 80, "Dishwashing": 60,
-  "Moving": 100, "Other": 90,
+  "Moving": 100, "Braai Setup": 90, "Car Wash": 70, "Dog Walking": 60,
+  "Tutoring": 120, "Pool Cleaning": 100, "Tiling & Grouting": 130,
+  "Electrical (minor)": 140, "Other": 90,
 };
 
 function timeAgo(dateStr: string) {
@@ -105,7 +114,7 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
               )}
 
               <div>
-                <h1 className="font-serif text-5xl lg:text-6xl font-extrabold leading-[1.08] tracking-tight" style={{ color: "#1B2E4B" }}>
+                <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.08] tracking-tight" style={{ color: "#1B2E4B" }}>
                   Find{" "}
                   <span className="relative inline-block">
                     trusted
@@ -368,7 +377,7 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
             <h2 className="font-serif text-4xl font-bold mb-3" style={{ color: "#1B2E4B" }}>Why choose PieceJobs ZA?</h2>
             <p className="text-muted-foreground text-lg">Built for real South Africans — homeowners and workers alike.</p>
           </div>
-          <div className="grid md:grid-cols-4 gap-5 max-w-5xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 max-w-5xl mx-auto">
             {[
               { icon: "🔒", title: "Secure Payments",  desc: "Payment is held in escrow until the job is done — protecting both homeowner and worker." },
               { icon: "🪪", title: "Verified Workers",  desc: "Every worker uploads their SA ID before accepting jobs. Community-reviewed profiles." },

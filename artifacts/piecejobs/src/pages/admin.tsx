@@ -10,10 +10,10 @@ import {
   LayoutDashboard, Users, Briefcase, FileText, LogOut,
   MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2, CreditCard,
   AlertTriangle, Star, ChevronRight, PauseCircle, Send, Flag, RefreshCw,
-  RotateCcw, Mail,
+  RotateCcw, Mail, BarChart2,
 } from "lucide-react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
@@ -34,7 +34,7 @@ async function sbPatch(table: string, id: string, body: Record<string, unknown>)
   });
 }
 
-type Section = "overview" | "workers" | "jobs" | "applications" | "payments" | "emails";
+type Section = "overview" | "workers" | "jobs" | "applications" | "payments" | "emails" | "analytics";
 type Stats = { jobs: number; workers: number; applications: number; pending: number; platformEarnings: number };
 type PaymentRow = Payment & { job_title?: string; job_city?: string };
 type WorkerFull = Worker & { is_suspended?: boolean };
@@ -125,6 +125,7 @@ export default function Admin() {
     { key: "applications", label: "Applications", icon: <FileText         className="h-4 w-4" /> },
     { key: "payments",     label: "Payments",     icon: <CreditCard       className="h-4 w-4" /> },
     { key: "emails",       label: "Emails",       icon: <Mail             className="h-4 w-4" /> },
+    { key: "analytics",    label: "Analytics",    icon: <BarChart2        className="h-4 w-4" /> },
   ];
 
   const breadcrumb = (
@@ -137,8 +138,8 @@ export default function Admin() {
 
   return (
     <div className="flex min-h-screen" style={{ background: "#F1F5F9" }}>
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 flex flex-col" style={{ background: "#1B2E4B" }}>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-56 shrink-0 flex-col" style={{ background: "#1B2E4B" }}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
           <MapPin className="h-5 w-5 text-white/80" />
           <span className="font-serif font-bold text-white text-sm leading-tight">
@@ -170,7 +171,20 @@ export default function Admin() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-border px-8 py-4 flex items-center justify-between">
+        {/* Mobile top nav */}
+        <div className="md:hidden flex items-center gap-0 overflow-x-auto border-b border-border" style={{ background: "#1B2E4B" }}>
+          {NAV.map(n => (
+            <button key={n.key} onClick={() => setSection(n.key)}
+              className={`flex flex-col items-center gap-1 px-3 py-2.5 text-[10px] font-bold shrink-0 transition-colors ${section === n.key ? "text-white border-b-2 border-amber-400" : "text-white/55"}`}>
+              {n.icon}<span className="truncate max-w-[50px]">{n.label}</span>
+            </button>
+          ))}
+          <button onClick={handleSignOut} className="flex flex-col items-center gap-1 px-3 py-2.5 text-[10px] font-bold shrink-0 text-white/55 ml-auto">
+            <LogOut className="h-4 w-4" /><span>Out</span>
+          </button>
+        </div>
+
+        <header className="hidden md:flex bg-white border-b border-border px-8 py-4 items-center justify-between">
           {breadcrumb}
           <Button variant="outline" size="sm" onClick={handleSignOut}><LogOut className="h-4 w-4 mr-1.5" />Logout</Button>
         </header>
@@ -186,6 +200,7 @@ export default function Admin() {
               {section === "applications" && <ApplicationsSection applications={applications} onSelect={setSelectedApp} />}
               {section === "payments"     && <PaymentsSection payments={payments} onPatch={patchPayment} />}
               {section === "emails"       && <EmailsSection emails={emailNotifications} />}
+              {section === "analytics"    && <AnalyticsSection jobs={jobs} workers={workers} payments={payments} applications={applications} />}
             </>
           )}
         </main>
@@ -1092,6 +1107,168 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <p className="text-xs font-semibold text-muted-foreground">{label}</p>
       <p className="font-semibold text-foreground mt-0.5">{value ?? "—"}</p>
+    </div>
+  );
+}
+
+/* ── Analytics ──────────────────────────────────────────────────────────── */
+
+function groupByWeek(items: { created_at: string }[], countField = "count") {
+  const weeks: Record<string, number> = {};
+  const sorted = [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  sorted.forEach(item => {
+    const d = new Date(item.created_at);
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const key = monday.toLocaleDateString("en-ZA", { month: "short", day: "numeric" });
+    weeks[key] = (weeks[key] || 0) + 1;
+  });
+  return Object.entries(weeks).slice(-8).map(([week, n]) => ({ week, [countField]: n }));
+}
+
+const CHART_COLORS = ["#2D7DD2", "#F5A623", "#10B981", "#7C3AED", "#EF4444", "#0EA5E9"];
+
+function AnalyticsSection({
+  jobs, workers, payments, applications,
+}: {
+  jobs: JobFull[];
+  workers: WorkerFull[];
+  payments: PaymentRow[];
+  applications: (Application & { job_title?: string; job_poster?: string })[];
+}) {
+  const jobsByWeek    = groupByWeek(jobs, "jobs");
+  const workersByWeek = groupByWeek(workers, "workers");
+  const appsByWeek    = groupByWeek(applications, "applications");
+
+  const earningsByWeek = (() => {
+    const released = payments.filter(p => p.status === "released");
+    const weeks: Record<string, number> = {};
+    released.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    released.forEach(p => {
+      const d = new Date(p.created_at);
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const key = monday.toLocaleDateString("en-ZA", { month: "short", day: "numeric" });
+      weeks[key] = (weeks[key] || 0) + p.platform_fee;
+    });
+    return Object.entries(weeks).slice(-8).map(([week, earnings]) => ({ week, earnings: Math.round(earnings) }));
+  })();
+
+  const topCategories = (() => {
+    const cats: Record<string, number> = {};
+    jobs.forEach(j => { cats[j.category] = (cats[j.category] || 0) + 1; });
+    return Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count }));
+  })();
+
+  const totalEarnings  = payments.filter(p => p.status === "released").reduce((s, p) => s + p.platform_fee, 0);
+  const conversionRate = jobs.length > 0 ? Math.round((payments.filter(p => p.status === "released").length / jobs.length) * 100) : 0;
+  const avgJobValue    = jobs.length > 0 ? Math.round(payments.reduce((s, p) => s + p.amount, 0) / Math.max(payments.length, 1)) : 0;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="font-serif text-2xl font-bold" style={{ color: "#1B2E4B" }}>Platform Analytics</h2>
+
+      {/* KPI cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard label="Total Platform Earnings" value={totalEarnings} prefix="R" color="#7C3AED" sub="From released payments" />
+        <StatCard label="Conversion Rate"         value={`${conversionRate}%`} color="#10B981" sub="Jobs completed vs posted" />
+        <StatCard label="Avg Job Value"           value={avgJobValue} prefix="R" color="#2D7DD2" sub="Per escrow transaction" />
+        <StatCard label="Total Applications"      value={applications.length} color="#F5A623" sub="Across all jobs" />
+      </div>
+
+      {/* Jobs over time */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="font-semibold text-foreground mb-4">Jobs Posted (by week)</p>
+          {jobsByWeek.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={jobsByWeek}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="jobs" stroke="#2D7DD2" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="font-semibold text-foreground mb-4">Workers Registered (by week)</p>
+          {workersByWeek.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={workersByWeek}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="workers" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Earnings & Applications over time */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="font-semibold text-foreground mb-4">Platform Earnings (by week, R)</p>
+          {earningsByWeek.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={earningsByWeek}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => [`R${v}`, "Earnings"]} />
+                <Bar dataKey="earnings" fill="#7C3AED" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="font-semibold text-foreground mb-4">Applications (by week)</p>
+          {appsByWeek.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={appsByWeek}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="applications" fill="#F5A623" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Top categories */}
+      <div className="bg-white rounded-2xl border border-border p-6">
+        <p className="font-semibold text-foreground mb-4">Top Job Categories</p>
+        {topCategories.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={topCategories} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
+              <Tooltip />
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {topCategories.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
     </div>
   );
 }

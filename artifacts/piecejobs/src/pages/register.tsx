@@ -31,6 +31,7 @@ export default function Register() {
   const [, setLocation]             = useHashLocation();
   const { toast }                   = useToast();
 
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [referralCode, setReferralCode] = useState("");
   const [step, setStep]         = useState<1 | 2>(1);
   const [userId, setUserId]     = useState<string | null>(null);
@@ -351,8 +352,26 @@ export default function Register() {
                   </div>
                 )}
 
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={e => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border accent-blue-600"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    I have read and agree to the{" "}
+                    <Link href={role === "worker" ? "/worker-agreement" : "/homeowner-agreement"}
+                      className="font-semibold hover:underline" style={{ color: "#2D7DD2" }}>
+                      {role === "worker" ? "Worker Agreement" : "Homeowner Agreement"}
+                    </Link>
+                    {" "}and the{" "}
+                    <Link href="/terms" className="font-semibold hover:underline" style={{ color: "#2D7DD2" }}>Terms of Service</Link>.
+                  </span>
+                </label>
+
                 <Button type="submit" className="w-full h-11 font-bold text-base text-white mt-2" style={{ background: "#2D7DD2" }}
-                  disabled={loading || !city}>
+                  disabled={loading || !city || !agreedToTerms}>
                   {loading
                     ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</>
                     : role === "worker" ? "Next: Upload Documents →" : "Create account"}

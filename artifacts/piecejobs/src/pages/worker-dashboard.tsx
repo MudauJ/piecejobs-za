@@ -311,6 +311,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                               ✓ Verified
                             </span>
                           )}
+                          <WorkerBadgePill badge={worker.badge} />
                         </div>
                       </div>
                       {!editing && (
@@ -804,5 +805,18 @@ function EarningsTab({ earnings }: { earnings: EarningRow[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function WorkerBadgePill({ badge }: { badge?: string }) {
+  const b = badge === "diamond" ? { emoji: "💎", label: "Diamond", color: "bg-sky-50 text-sky-800 border-sky-200" }
+    : badge === "gold"    ? { emoji: "🥇", label: "Gold",    color: "bg-amber-50 text-amber-800 border-amber-200" }
+    : badge === "silver"  ? { emoji: "🥈", label: "Silver",  color: "bg-slate-50 text-slate-700 border-slate-200" }
+    : badge === "bronze"  ? { emoji: "🥉", label: "Bronze",  color: "bg-orange-50 text-orange-800 border-orange-200" }
+    : { emoji: "⭐", label: "New Worker", color: "bg-purple-50 text-purple-700 border-purple-200" };
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full border mt-1 ${b.color}`}>
+      {b.emoji} {b.label}
+    </span>
   );
 }

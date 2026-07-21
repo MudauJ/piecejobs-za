@@ -1,0 +1,2 @@
+- [PieceJobs badge system](piecejobs-badge-system.md) — badge stored as TEXT in workers table; getBadgeInfo() in supabase.ts; DB column must be added manually
+- [PieceJobs git push](piecejobs-github-push.md) — git add/commit blocked in main agent; use follow-up task for GitHub push to MudauJ/piecejobs-za

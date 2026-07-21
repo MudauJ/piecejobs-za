@@ -50,6 +50,7 @@ export type Worker = {
   referral_code?: string;
   referred_by?: string;
   referral_earnings?: number;
+  badge?: string;
 };
 
 export type Payment = {
@@ -127,8 +128,25 @@ export const CATEGORIES = [
   "Grass cutting",
   "Dishwashing",
   "Moving",
+  "Braai Setup",
+  "Car Wash",
+  "Dog Walking",
+  "Tutoring",
+  "Pool Cleaning",
+  "Tiling & Grouting",
+  "Electrical (minor)",
   "Other",
 ];
+
+export type BadgeLevel = "new" | "bronze" | "silver" | "gold" | "diamond";
+
+export function getBadgeInfo(completedJobs: number): { level: BadgeLevel; emoji: string; label: string; next: number | null; nextLabel: string | null } {
+  if (completedJobs >= 30) return { level: "diamond", emoji: "💎", label: "Diamond", next: null, nextLabel: null };
+  if (completedJobs >= 15) return { level: "gold",    emoji: "🥇", label: "Gold",    next: 30, nextLabel: "Diamond" };
+  if (completedJobs >= 5)  return { level: "silver",  emoji: "🥈", label: "Silver",  next: 15, nextLabel: "Gold" };
+  if (completedJobs >= 1)  return { level: "bronze",  emoji: "🥉", label: "Bronze",  next: 5,  nextLabel: "Silver" };
+  return { level: "new", emoji: "⭐", label: "New", next: 1, nextLabel: "Bronze" };
+}
 
 export const CITIES = [
   "Johannesburg",

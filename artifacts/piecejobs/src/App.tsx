@@ -15,6 +15,8 @@ import WorkerDashboard from "@/pages/worker-dashboard";
 import WorkerDocuments from "@/pages/worker-documents";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
+import WorkerAgreement from "@/pages/worker-agreement";
+import HomeownerAgreement from "@/pages/homeowner-agreement";
 import NotFound from "@/pages/not-found";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
@@ -162,8 +164,10 @@ function AppRoutes({
         </Shell>
       )} />
 
-      <Route path="/terms"   component={Terms} />
-      <Route path="/privacy" component={Privacy} />
+      <Route path="/terms"               component={Terms} />
+      <Route path="/privacy"             component={Privacy} />
+      <Route path="/worker-agreement"    component={WorkerAgreement} />
+      <Route path="/homeowner-agreement" component={HomeownerAgreement} />
 
       <Route component={NotFound} />
     </Switch>

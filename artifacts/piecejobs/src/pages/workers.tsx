@@ -23,6 +23,19 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+function WorkerBadge(badge?: string) {
+  const b = badge === "diamond" ? { emoji: "💎", label: "Diamond" }
+    : badge === "gold"    ? { emoji: "🥇", label: "Gold" }
+    : badge === "silver"  ? { emoji: "🥈", label: "Silver" }
+    : badge === "bronze"  ? { emoji: "🥉", label: "Bronze" }
+    : null;
+  return b ? (
+    <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 shrink-0">
+      {b.emoji} {b.label}
+    </span>
+  ) : null;
+}
+
 const SKILL_CATEGORIES = CATEGORIES.filter(c => c !== "Other");
 
 export default function Workers({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
@@ -134,11 +147,12 @@ export default function Workers({ setModalState }: { setModalState: React.Dispat
                       {initials}
                     </div>
                     <div className="flex-1 min-w-0 pt-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-serif font-bold text-lg text-foreground truncate">{fullName}</h3>
                         {worker.is_verified && (
                           <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
                         )}
+                        {WorkerBadge(worker.badge)}
                       </div>
                       <p className="text-sm font-medium text-muted-foreground">{primarySkill}</p>
                       <div className="flex items-center gap-1 mt-1 text-muted-foreground">
