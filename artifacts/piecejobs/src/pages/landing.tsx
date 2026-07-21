@@ -20,6 +20,12 @@ const CATEGORY_META: Record<string, { emoji: string }> = {
 
 const DISPLAY_CATEGORIES = Object.keys(CATEGORY_META);
 
+const SKILL_RATES: Record<string, number> = {
+  "Cleaning": 80, "Garden": 70, "Laundry": 60, "Plumbing": 150,
+  "Painting": 120, "Grass cutting": 80, "Dishwashing": 60,
+  "Moving": 100, "Other": 90,
+};
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const hours = Math.floor(diff / 3600000);
@@ -34,6 +40,8 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [calcSkill, setCalcSkill]     = useState("Cleaning");
+  const [calcHours, setCalcHours]     = useState(20);
   const [, setLocation] = useHashLocation();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -258,6 +266,25 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
         </div>
       </section>
 
+      {/* ── Stats Banner ── */}
+      <section style={{ background: "#2D7DD2" }} className="py-7">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 text-white text-center">
+            {[
+              { num: "2 400+", label: "Registered Workers" },
+              { num: "8 100+", label: "Jobs Completed" },
+              { num: "47",     label: "Suburbs Covered" },
+              { num: "🇿🇦",   label: "Proudly South African" },
+            ].map(s => (
+              <div key={s.label}>
+                <p className="font-serif text-3xl font-extrabold leading-tight">{s.num}</p>
+                <p className="text-white/70 text-sm mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Categories ── */}
       <section className="py-20 bg-white">
         <div className="container mx-auto px-6">
@@ -330,6 +357,120 @@ export default function Landing({ setModalState }: { setModalState: React.Dispat
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Why PieceJobs ZA? ── */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-12">
+            <h2 className="font-serif text-4xl font-bold mb-3" style={{ color: "#1B2E4B" }}>Why choose PieceJobs ZA?</h2>
+            <p className="text-muted-foreground text-lg">Built for real South Africans — homeowners and workers alike.</p>
+          </div>
+          <div className="grid md:grid-cols-4 gap-5 max-w-5xl mx-auto">
+            {[
+              { icon: "🔒", title: "Secure Payments",  desc: "Payment is held in escrow until the job is done — protecting both homeowner and worker." },
+              { icon: "🪪", title: "Verified Workers",  desc: "Every worker uploads their SA ID before accepting jobs. Community-reviewed profiles." },
+              { icon: "💬", title: "In-App Chat",       desc: "Message your worker directly through the platform — no need to share personal numbers." },
+              { icon: "⚡", title: "Fast Hiring",        desc: "Get your first application within hours. Most jobs are filled the same day." },
+            ].map(w => (
+              <div key={w.title} className="flex flex-col items-center gap-4 text-center p-7 rounded-2xl border border-border hover:shadow-md transition-shadow">
+                <span className="text-5xl">{w.icon}</span>
+                <h3 className="font-bold text-lg" style={{ color: "#1B2E4B" }}>{w.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">{w.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Earnings Calculator ── */}
+      <section className="py-20 bg-background">
+        <div className="container mx-auto px-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-10">
+              <h2 className="font-serif text-4xl font-bold mb-3" style={{ color: "#1B2E4B" }}>How much could you earn?</h2>
+              <p className="text-muted-foreground text-lg">Workers set their own rates. Calculate your potential income.</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-border p-8 space-y-7 shadow-sm">
+              <div>
+                <label className="block text-sm font-bold mb-3 text-foreground">Your main skill</label>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(SKILL_RATES).map(skill => (
+                    <button
+                      key={skill}
+                      type="button"
+                      onClick={() => setCalcSkill(skill)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                        calcSkill === skill ? "border-primary text-white" : "bg-white text-foreground border-border hover:border-primary"
+                      }`}
+                      style={calcSkill === skill ? { background: "#2D7DD2" } : undefined}
+                    >{skill}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-3 text-foreground">
+                  Hours per week: <span style={{ color: "#2D7DD2" }}>{calcHours}h</span>
+                </label>
+                <input
+                  type="range" min="5" max="40" step="5"
+                  value={calcHours}
+                  onChange={e => setCalcHours(Number(e.target.value))}
+                  className="w-full"
+                  style={{ accentColor: "#2D7DD2" }}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
+                  <span>5h / week</span><span>40h / week</span>
+                </div>
+              </div>
+              <div className="rounded-xl p-6 text-center space-y-1.5" style={{ background: "rgba(45,125,210,0.06)", border: "1px solid rgba(45,125,210,0.2)" }}>
+                <p className="text-sm text-muted-foreground font-medium">Your estimated monthly earnings</p>
+                <p className="font-serif font-extrabold" style={{ fontSize: "3rem", color: "#1B2E4B", lineHeight: 1 }}>
+                  R{((SKILL_RATES[calcSkill] ?? 80) * calcHours * 4).toLocaleString("en-ZA")}
+                </p>
+                <p className="text-xs text-muted-foreground">Based on R{SKILL_RATES[calcSkill] ?? 80}/hr × {calcHours}h × 4 weeks</p>
+              </div>
+              <Button className="w-full font-bold text-white text-base h-12" style={{ background: "#2D7DD2" }} onClick={() => setLocation("/register")}>
+                Start Earning on PieceJobs ZA →
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Testimonials ── */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-12">
+            <h2 className="font-serif text-4xl font-bold mb-3" style={{ color: "#1B2E4B" }}>What our community says</h2>
+            <p className="text-muted-foreground text-lg">Real stories from real South Africans.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {[
+              { name: "Nomsa M.", city: "Johannesburg", role: "Homeowner", quote: "I found a reliable cleaner within 3 hours of posting. She's been coming every Saturday since. A game changer!", rating: 5 },
+              { name: "Sipho K.", city: "Durban",       role: "Garden Worker", quote: "I was struggling to find consistent work. PieceJobs ZA gave me 4 regular clients in my area. My income tripled.", rating: 5 },
+              { name: "Lerato D.", city: "Cape Town",   role: "Homeowner", quote: "The ID verification and community ratings give me real peace of mind. I know exactly who's coming to my home.", rating: 5 },
+            ].map(t => (
+              <div key={t.name} className="bg-white border border-border rounded-2xl p-7 space-y-4 hover:shadow-md transition-shadow">
+                <div className="flex">
+                  {Array.from({ length: t.rating }).map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <p className="text-foreground text-sm leading-relaxed italic">"{t.quote}"</p>
+                <div className="flex items-center gap-3 pt-2 border-t border-border">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm shrink-0">
+                    {t.name[0]}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.role} · {t.city}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

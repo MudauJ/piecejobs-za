@@ -360,6 +360,20 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
                   <span className={`text-xs font-bold rounded-full px-2.5 py-1 ${statusBadge(selected.status)}`}>{selected.status}</span>
                 </div>
                 <p className="text-muted-foreground">{selected.applications.length} application{selected.applications.length !== 1 ? "s" : ""}</p>
+                {(selected.scheduled_date || selected.scheduled_time) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {selected.scheduled_date && (
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5">
+                        📅 {new Date(selected.scheduled_date).toLocaleDateString("en-ZA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                      </span>
+                    )}
+                    {selected.scheduled_time && (
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5">
+                        🕐 {selected.scheduled_time.slice(0, 5)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {selected.status === "hired" && (
                 <Button

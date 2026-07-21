@@ -245,6 +245,12 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                           <Users className="h-4 w-4 shrink-0" />
                           {job.application_count ?? 0} application{(job.application_count ?? 0) !== 1 ? "s" : ""}
                         </span>
+                        {(job.scheduled_date || job.scheduled_time) && (
+                          <span className="flex items-center gap-1.5 font-medium" style={{ color: "#2D7DD2" }}>
+                            📅 {job.scheduled_date && new Date(job.scheduled_date + "T00:00:00").toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })}
+                            {job.scheduled_time && ` · 🕐 ${job.scheduled_time.slice(0, 5)}`}
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-muted-foreground text-sm line-clamp-2 leading-relaxed">{job.description}</p>

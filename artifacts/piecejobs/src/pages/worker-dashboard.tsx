@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, CATEGORIES, CITIES } from "@/lib/supabase";
+import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, type Notification, CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useHashLocation } from "wouter/use-hash-location";
 import {
@@ -12,16 +12,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp, MessageCircle, AlertTriangle, FileText, ExternalLink, UploadCloud } from "lucide-react";
+import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp, MessageCircle, AlertTriangle, FileText, ExternalLink, UploadCloud, Bell } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { ModalState } from "@/App";
 import { ChatModal } from "@/components/chat-modal";
 
 type Tab = "profile" | "applications" | "jobs" | "earnings";
-type AppWithJob = Application & { job_title?: string; job_suburb?: string; job_city?: string };
+type AppWithJob = Application & { job_title?: string; job_suburb?: string; job_city?: string; job_scheduled_date?: string; job_scheduled_time?: string };
 type EarningRow = Payment & { job_title?: string; job_suburb?: string; job_city?: string; job_category?: string };
 
 export default function WorkerDashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, profile }       = useAuth();
+  const { toast }               = useToast();
   const [, setLocation]         = useHashLocation();
   const [tab, setTab]           = useState<Tab>("profile");
   const [worker, setWorker]     = useState<Worker | null>(null);
@@ -29,6 +31,8 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [matchingJobs, setMatchingJobs] = useState<Job[]>([]);
   const [earnings, setEarnings]         = useState<EarningRow[]>([]);
   const [documents, setDocuments]       = useState<WorkerDocument[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifOpen, setNotifOpen]         = useState(false);
   const [chatJob, setChatJob]           = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
@@ -58,17 +62,19 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     const w = wRes.data as Worker | null;
     setWorker(w);
 
-    type RawApp = Application & { jobs?: { title: string; suburb: string; city: string; budget: number } };
+    type RawApp = Application & { jobs?: { title: string; suburb: string; city: string; budget: number; scheduled_date?: string; scheduled_time?: string } };
 
     const toAppWithJob = (a: RawApp): AppWithJob => ({
       ...a,
-      job_title:  a.jobs?.title  ?? "Unknown job",
-      job_suburb: a.jobs?.suburb ?? "",
-      job_city:   a.jobs?.city   ?? "",
+      job_title:           a.jobs?.title            ?? "Unknown job",
+      job_suburb:          a.jobs?.suburb            ?? "",
+      job_city:            a.jobs?.city              ?? "",
+      job_scheduled_date:  a.jobs?.scheduled_date    ?? "",
+      job_scheduled_time:  a.jobs?.scheduled_time    ?? "",
     });
 
     const byIdRes = await fetch(
-      `${SB_URL}/rest/v1/applications?applicant_id=eq.${userId}&select=*,jobs(title,suburb,city,budget)&order=created_at.desc`,
+      `${SB_URL}/rest/v1/applications?applicant_id=eq.${userId}&select=*,jobs(title,suburb,city,budget,scheduled_date,scheduled_time)&order=created_at.desc`,
       { headers },
     );
     const byId: RawApp[] = byIdRes.ok ? await byIdRes.json() : [];
@@ -78,7 +84,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     if (apps.length === 0 && w?.phone) {
       const phone = encodeURIComponent(w.phone);
       const byPhoneRes = await fetch(
-        `${SB_URL}/rest/v1/applications?worker_phone=eq.${phone}&select=*,jobs(title,suburb,city,budget)&order=created_at.desc`,
+        `${SB_URL}/rest/v1/applications?worker_phone=eq.${phone}&select=*,jobs(title,suburb,city,budget,scheduled_date,scheduled_time)&order=created_at.desc`,
         { headers },
       );
       const byPhone: RawApp[] = byPhoneRes.ok ? await byPhoneRes.json() : [];
@@ -86,6 +92,14 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     }
 
     setApplications(apps);
+
+    if (w) {
+      const notifRes = await fetch(
+        `${SB_URL}/rest/v1/notifications_queue?worker_id=eq.${w.id}&status=eq.pending&order=created_at.desc&limit=20`,
+        { headers },
+      );
+      if (notifRes.ok) setNotifications(await notifRes.json() as Notification[]);
+    }
 
     const query = supabase.from("jobs").select("*").eq("status", "open").order("created_at", { ascending: false }).limit(20);
     const { data: jData } = w?.skills?.length
@@ -117,6 +131,35 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     }
 
     setLoading(false);
+  }
+
+  function timeAgo(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const h = Math.floor(diff / 3600000);
+    if (h < 1) return "Just now";
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  function jobCountdown(dateStr: string, timeStr?: string): string {
+    if (!dateStr) return "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const jobDate = new Date(dateStr + "T00:00:00");
+    const diffDays = Math.round((jobDate.getTime() - today.getTime()) / 86400000);
+    const timeLabel = timeStr ? ` at ${timeStr.slice(0, 5)}` : "";
+    if (diffDays < 0)  return "";
+    if (diffDays === 0) return `Today${timeLabel}`;
+    if (diffDays === 1) return `Tomorrow${timeLabel}`;
+    return `In ${diffDays} days${timeLabel}`;
+  }
+
+  async function markNotifRead(id: string) {
+    await fetch(`${SB_URL}/rest/v1/notifications_queue?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ status: "read" }),
+    });
+    setNotifications(prev => prev.filter(n => n.id !== id));
   }
 
   function startEdit() {
@@ -178,19 +221,64 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
       </div>
 
       <div className="container mx-auto px-6 py-8">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-8 bg-white rounded-xl p-1 border border-border w-fit">
-          {TABS.map(t => (
+        {/* Tabs + Notification Bell */}
+        <div className="flex items-start justify-between mb-8 gap-4">
+          <div className="flex gap-1 bg-white rounded-xl p-1 border border-border w-fit">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  tab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.icon}{t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Notification Bell */}
+          <div className="relative shrink-0">
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                tab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+              onClick={() => setNotifOpen(v => !v)}
+              className="relative flex items-center gap-2 p-2 rounded-xl border border-border bg-white hover:bg-muted/30 transition-colors"
             >
-              {t.icon}{t.label}
+              <Bell className="h-5 w-5 text-foreground" />
+              {notifications.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+                  {notifications.length}
+                </span>
+              )}
             </button>
-          ))}
+            {notifOpen && (
+              <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-border rounded-xl shadow-xl z-50">
+                <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                  <p className="font-bold text-sm" style={{ color: "#1B2E4B" }}>
+                    {notifications.length > 0 ? `${notifications.length} New Job${notifications.length > 1 ? "s" : ""} Near You` : "No new notifications"}
+                  </p>
+                  {notifications.length > 0 && (
+                    <button onClick={() => setNotifOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">You're all caught up!</div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                    {notifications.map(n => (
+                      <div
+                        key={n.id}
+                        className="px-4 py-3 hover:bg-muted/30 cursor-pointer"
+                        onClick={() => { markNotifRead(n.id); setTab("jobs"); setNotifOpen(false); }}
+                      >
+                        <p className="text-sm text-foreground leading-snug">{n.message}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{timeAgo(n.created_at)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -420,6 +508,42 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                             </div>
                           )}
                         </div>
+                        <div className="col-span-2 border-t border-border pt-5 space-y-4">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Refer a Friend</p>
+                          <div className="rounded-xl p-4 space-y-3" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
+                            <p className="text-sm font-semibold" style={{ color: "#92400E" }}>Your referral code</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-white rounded-lg px-4 py-2.5 font-mono font-bold text-lg tracking-[0.2em] text-center" style={{ border: "1px solid #FCD34D", color: "#92400E" }}>
+                                {worker.referral_code ?? "—"}
+                              </code>
+                              <Button size="sm" variant="outline" onClick={() => {
+                                if (worker.referral_code) {
+                                  navigator.clipboard.writeText(worker.referral_code);
+                                  toast({ title: "Copied!", description: "Referral code copied to clipboard." });
+                                }
+                              }}>Copy</Button>
+                            </div>
+                            <Button
+                              size="sm"
+                              className="w-full font-bold text-white"
+                              style={{ background: "#25D366" }}
+                              onClick={() => {
+                                const msg = `Join me on PieceJobs ZA and earn money doing piece jobs in your area! Use my referral code ${worker.referral_code ?? ""} when you sign up. 🇿🇦 Register at piecejobsza.co.za`;
+                                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+                              }}
+                            >
+                              📱 Share on WhatsApp
+                            </Button>
+                            <p className="text-xs" style={{ color: "#B45309" }}>
+                              Earn <strong>R50 bonus</strong> for every friend who completes their first job using your code!
+                            </p>
+                          </div>
+                          {(worker.referral_earnings ?? 0) > 0 && (
+                            <p className="text-sm font-semibold text-green-700">
+                              Total referral earnings: <strong>R{worker.referral_earnings}</strong>
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -470,6 +594,14 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                         <p className="text-sm font-semibold text-green-800">
                           🎉 You got the job! Message the homeowner directly using the button below — all communication is kept secure inside PieceJobs ZA.
                         </p>
+                        {(app.job_scheduled_date || app.job_scheduled_time) && (() => {
+                          const countdown = jobCountdown(app.job_scheduled_date ?? "", app.job_scheduled_time);
+                          return countdown ? (
+                            <div className="flex items-center gap-2 text-sm font-bold text-green-900 bg-green-100 border border-green-300 rounded-lg px-3 py-2">
+                              📅 Job scheduled: {countdown}
+                            </div>
+                          ) : null;
+                        })()}
                         <Button
                           size="sm"
                           className="font-bold text-white"

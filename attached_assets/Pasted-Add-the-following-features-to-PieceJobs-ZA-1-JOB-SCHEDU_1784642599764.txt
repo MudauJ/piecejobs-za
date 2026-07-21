@@ -1,0 +1,151 @@
+Add the following features to PieceJobs ZA:
+
+## 1. JOB SCHEDULING
+In the Post a Job form, add two new fields:
+- "Date Needed" (date picker) — already exists, make it required
+- "Time Needed" (time picker, e.g. 08:00, 09:00, 10:00... 17:00 in 30 min intervals)
+
+Add these columns to jobs table if not exist:
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_time TIME;
+
+On the job card (job board and homeowner dashboard), show:
+- 📅 Date: 2026/07/25
+- 🕐 Time: 09:00
+
+On the worker dashboard My Applications tab, show the scheduled date and time for accepted jobs with a countdown: "Job in 2 days" or "Job tomorrow at 09:00" or "Job today at 14:00"
+
+On the homeowner dashboard hired job view, show the scheduled date and time prominently at the top.
+
+## 2. WHATSAPP JOB ALERTS FOR WORKERS
+When a new job is posted, send WhatsApp notifications to all workers in the same city.
+
+In the job posting submit function, after saving the job to Supabase:
+1. Fetch all workers where city = job.city and is_verified = true
+2. For each verified worker in that city, open a WhatsApp link... actually since we can't send bulk WhatsApp automatically without an API, instead:
+   - Show a toast to the homeowner: "Your job has been posted! Verified workers in [city] will be notified."
+   - Store a notifications_queue record for each worker
+
+CREATE TABLE IF NOT EXISTS notifications_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  worker_id UUID REFERENCES workers(id),
+  job_id UUID REFERENCES jobs(id),
+  message TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE notifications_queue DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON notifications_queue TO anon, authenticated;
+
+In the worker dashboard, add a "🔔 New Jobs" badge/notification bell in the nav showing count of pending notifications for that worker. Clicking it shows a dropdown list of new jobs near them.
+
+## 3. TERMS OF SERVICE PAGE
+Create a new page at /#/terms with:
+- PieceJobs ZA Terms of Service
+- Sections: Introduction, User Accounts, For Homeowners, For Workers, Payments and Escrow, Platform Fees (15%), Prohibited Conduct, Dispute Resolution, Limitation of Liability, Governing Law (South African law), Contact (info@piecejobsza.co.za)
+- Professional legal-style layout in navy/white
+- Link in footer: "Terms of Service"
+
+## 4. PRIVACY POLICY PAGE
+Create a new page at /#/privacy with:
+- PieceJobs ZA Privacy Policy
+- Sections: Information We Collect, How We Use Your Information, ID Document Storage, Payment Information, WhatsApp Communications, Data Security, Your Rights (POPIA compliant — South African POPIA law), Contact
+- Note: compliant with South Africa's POPIA (Protection of Personal Information Act)
+- Link in footer: "Privacy Policy"
+
+## 5. LANDING PAGE IMPROVEMENTS
+Update the homepage (/) to add:
+- A "How much can you earn?" calculator section:
+  * Worker selects skill (dropdown) and hours per week (slider 5-40)
+  * Shows estimated monthly earnings based on average rates
+  * e.g. Cleaning at R80/hr × 20hrs/week × 4 weeks = R6,400/month
+  * Show in large amber number with "estimated monthly earnings"
+
+- A "Why PieceJobs ZA?" section with 4 cards:
+  * 🔒 Secure Payments — Money held safely until job is done
+  * 🪪 Verified Workers — Every worker ID-checked before they can work
+  * 💬 In-App Chat — Communicate safely without sharing numbers
+  * ⚡ Fast Hiring — Post a job and get applications within hours
+
+- Testimonials section (placeholder with 3 fake SA testimonials):
+  * "Found a great garden service in Sandton within 2 hours!" — Sipho M., Johannesburg
+  * "I earn R4,500 extra every month doing ironing on weekends" — Grace N., Cape Town  
+  * "Safe, reliable, and I get paid the same day" — Thabo K., Pretoria
+
+- Stats banner: "2,400+ Workers | 8,100+ Jobs Done | 47 Suburbs | 🇿🇦 Proudly South African"
+
+## 6. EMAIL NOTIFICATIONS
+When key events happen, send an email using a simple mailto approach or log to a notifications table. For now, create an email_notifications table to queue emails:
+
+CREATE TABLE IF NOT EXISTS email_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  to_email TEXT,
+  subject TEXT,
+  body TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE email_notifications DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON email_notifications TO anon, authenticated;
+
+Queue emails for these events:
+- New application received → email to homeowner
+- Application accepted → email to worker
+- Payment received → email to worker
+- Job completed → email to homeowner and worker
+
+In the admin dashboard, add an "Emails" tab showing the email queue with status (pending/sent).
+
+## 7. REFERRAL SYSTEM
+Add a referral system for workers:
+
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referral_earnings INTEGER DEFAULT 0;
+
+When a worker registers, generate a unique referral code (first 4 letters of name + random 4 digits, e.g. THAB1234).
+
+On worker registration form, add optional field: "Referral code (if someone referred you)"
+
+In worker dashboard, add a "Refer a Friend" section showing:
+- Their unique referral code in a box with a "Copy" button
+- WhatsApp share button: opens "Join me on PieceJobs ZA and earn money doing piece jobs! Use my code [CODE] when you sign up: https://piecejobsza.co.za"
+- Count of successful referrals
+- Note: "Earn R50 bonus when your referral completes their first job" (we will implement the R50 bonus payment via PayFast later)
+
+## IMPORTANT
+Run these SQL commands in Supabase before building:
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_time TIME;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS referral_earnings INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS notifications_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  worker_id UUID REFERENCES workers(id),
+  job_id UUID REFERENCES jobs(id),
+  message TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE notifications_queue DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON notifications_queue TO anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS email_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  to_email TEXT,
+  subject TEXT,
+  body TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE email_notifications DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON email_notifications TO anon, authenticated;
+
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Keep the existing navy/blue/amber design system.
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
-import { type Job, type Worker, type Application, type Payment } from "@/lib/supabase";
+import { type Job, type Worker, type Application, type Payment, type EmailNotification } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, Briefcase, FileText, LogOut,
   MapPin, ShieldCheck, ShieldOff, Trash2, CheckCircle2, CreditCard,
   AlertTriangle, Star, ChevronRight, PauseCircle, Send, Flag, RefreshCw,
-  RotateCcw,
+  RotateCcw, Mail,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -34,7 +34,7 @@ async function sbPatch(table: string, id: string, body: Record<string, unknown>)
   });
 }
 
-type Section = "overview" | "workers" | "jobs" | "applications" | "payments";
+type Section = "overview" | "workers" | "jobs" | "applications" | "payments" | "emails";
 type Stats = { jobs: number; workers: number; applications: number; pending: number; platformEarnings: number };
 type PaymentRow = Payment & { job_title?: string; job_city?: string };
 type WorkerFull = Worker & { is_suspended?: boolean };
@@ -52,6 +52,7 @@ export default function Admin() {
   const [jobs, setJobs]               = useState<JobFull[]>([]);
   const [applications, setApplications] = useState<(Application & { job_title?: string; job_poster?: string })[]>([]);
   const [payments, setPayments]       = useState<PaymentRow[]>([]);
+  const [emailNotifications, setEmailNotifications] = useState<EmailNotification[]>([]);
 
   const [pendingDocs, setPendingDocs]         = useState(0);
   const [selectedWorker, setSelectedWorker] = useState<WorkerFull | null>(null);
@@ -77,6 +78,8 @@ export default function Admin() {
     setPayments(paysData);
     const docsRaw = await sbGet<{ id: string }>("worker_documents?status=eq.pending&select=id");
     setPendingDocs(docsRaw.length);
+    const emailsData = await sbGet<EmailNotification>("email_notifications?order=created_at.desc&limit=200");
+    setEmailNotifications(emailsData);
     setStats({ jobs: jobsData.length, workers: wkData.length, applications: appsData.length, pending: wkData.filter(w => !w.is_verified).length, platformEarnings: earnings });
     setLoading(false);
   }
@@ -121,6 +124,7 @@ export default function Admin() {
     { key: "jobs",         label: "Jobs",         icon: <Briefcase        className="h-4 w-4" /> },
     { key: "applications", label: "Applications", icon: <FileText         className="h-4 w-4" /> },
     { key: "payments",     label: "Payments",     icon: <CreditCard       className="h-4 w-4" /> },
+    { key: "emails",       label: "Emails",       icon: <Mail             className="h-4 w-4" /> },
   ];
 
   const breadcrumb = (
@@ -181,6 +185,7 @@ export default function Admin() {
               {section === "jobs"         && <JobsSection jobs={jobs} onSelect={setSelectedJob} onRemove={removeJob} onFlag={flagJob} />}
               {section === "applications" && <ApplicationsSection applications={applications} onSelect={setSelectedApp} />}
               {section === "payments"     && <PaymentsSection payments={payments} onPatch={patchPayment} />}
+              {section === "emails"       && <EmailsSection emails={emailNotifications} />}
             </>
           )}
         </main>
@@ -1012,6 +1017,70 @@ function PaymentsSection({ payments, onPatch }: { payments: PaymentRow[]; onPatc
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Emails Section ─────────────────────────────────────────────────────── */
+
+function EmailsSection({ emails }: { emails: EmailNotification[] }) {
+  const [filter, setFilter] = useState<"all" | "pending" | "sent" | "failed">("all");
+  const filtered = filter === "all" ? emails : emails.filter(e => e.status === filter);
+  const statusBadge = (s: string) =>
+    s === "sent"    ? "bg-green-50 text-green-700 border-green-200" :
+    s === "failed"  ? "bg-red-50 text-red-600 border-red-200" :
+    s === "pending" ? "bg-amber-50 text-amber-700 border-amber-200" :
+    "bg-muted text-muted-foreground";
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="font-serif text-2xl font-bold" style={{ color: "#1B2E4B" }}>Email Notifications Queue</h2>
+          <p className="text-muted-foreground text-sm mt-0.5">{emails.length} total · {emails.filter(e => e.status === "pending").length} pending</p>
+        </div>
+        <div className="flex gap-2">
+          {(["all", "pending", "sent", "failed"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all capitalize ${filter === f ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}
+            >{f} {f !== "all" && `(${emails.filter(e => e.status === f).length})`}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-border">
+          <Mail className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="font-semibold text-foreground">No emails match this filter</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-muted/30">
+              <tr>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">To</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Subject</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                <th className="text-left px-5 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map(e => (
+                <tr key={e.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-5 py-3 font-medium text-foreground">{e.to_email}</td>
+                  <td className="px-5 py-3 text-muted-foreground max-w-xs truncate">{e.subject}</td>
+                  <td className="px-5 py-3">
+                    <span className={`inline-flex text-xs font-bold rounded-full px-2.5 py-0.5 border capitalize ${statusBadge(e.status)}`}>{e.status}</span>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground text-xs">{new Date(e.created_at).toLocaleString("en-ZA")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

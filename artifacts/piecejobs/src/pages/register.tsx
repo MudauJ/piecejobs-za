@@ -31,6 +31,7 @@ export default function Register() {
   const [, setLocation]             = useHashLocation();
   const { toast }                   = useToast();
 
+  const [referralCode, setReferralCode] = useState("");
   const [step, setStep]         = useState<1 | 2>(1);
   const [userId, setUserId]     = useState<string | null>(null);
   const [workerId, setWorkerId] = useState<string | null>(null);
@@ -80,19 +81,26 @@ export default function Register() {
       const first_name = nameParts[0] ?? fullName;
       const last_name  = nameParts.slice(1).join(" ") || "-";
 
+      const letters = (fullName.replace(/[^a-zA-Z]/g, "").toUpperCase() + "XXXX").slice(0, 4);
+      const digits = String(Math.floor(1000 + Math.random() * 9000));
+      const generatedReferralCode = letters + digits;
+
       const { data: wData } = await supabase.from("workers").insert([{
         first_name,
         last_name,
-        skills:       [],
+        skills:           [],
         suburb,
         city,
         phone,
-        id_number:    "",
-        hourly_rate:  Number(hourlyRate) || 0,
-        is_verified:  false,
-        rating:       0,
-        review_count: 0,
-        user_id:      uid,
+        id_number:        "",
+        hourly_rate:      Number(hourlyRate) || 0,
+        is_verified:      false,
+        rating:           0,
+        review_count:     0,
+        user_id:          uid,
+        referral_code:    generatedReferralCode,
+        referred_by:      referralCode.trim() || null,
+        referral_earnings: 0,
       }]).select("id").single();
 
       setUserId(uid);
@@ -324,6 +332,22 @@ export default function Register() {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R</span>
                       <Input type="number" className="pl-7 h-11" placeholder="80" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
                     </div>
+                  </div>
+                )}
+
+                {role === "worker" && (
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-1.5">
+                      Referral Code <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <Input
+                      placeholder="e.g. THAB1234"
+                      value={referralCode}
+                      onChange={e => setReferralCode(e.target.value.toUpperCase())}
+                      className="h-11"
+                      maxLength={8}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">Were you referred by another worker? Enter their code to give them a R50 bonus.</p>
                   </div>
                 )}
 

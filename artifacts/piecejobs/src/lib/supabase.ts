@@ -24,6 +24,8 @@ export type Job = {
   created_at: string;
   posted_by?: string;
   application_count?: number;
+  scheduled_date?: string;
+  scheduled_time?: string;
 };
 
 export type Worker = {
@@ -45,6 +47,9 @@ export type Worker = {
   bank_name?: string;
   bank_account?: string;
   flash_phone?: string;
+  referral_code?: string;
+  referred_by?: string;
+  referral_earnings?: number;
 };
 
 export type Payment = {
@@ -93,6 +98,24 @@ export type WorkerDocument = {
   uploaded_at: string;
   reviewed_at?: string;
   reviewed_by?: string;
+};
+
+export type Notification = {
+  id: string;
+  worker_id: string;
+  job_id: string;
+  message: string;
+  status: string;
+  created_at: string;
+};
+
+export type EmailNotification = {
+  id: string;
+  to_email: string;
+  subject: string;
+  body: string;
+  status: string;
+  created_at: string;
 };
 
 export const CATEGORIES = [

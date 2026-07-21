@@ -13,6 +13,8 @@ import Admin from "@/pages/admin";
 import Dashboard from "@/pages/dashboard";
 import WorkerDashboard from "@/pages/worker-dashboard";
 import WorkerDocuments from "@/pages/worker-documents";
+import Terms from "@/pages/terms";
+import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
@@ -159,6 +161,9 @@ function AppRoutes({
           <Landing setModalState={setModalState} />
         </Shell>
       )} />
+
+      <Route path="/terms"   component={Terms} />
+      <Route path="/privacy" component={Privacy} />
 
       <Route component={NotFound} />
     </Switch>
