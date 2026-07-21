@@ -1,0 +1,106 @@
+Upgrade the Super Admin dashboard with full functionality across all sections.
+
+## 1. WORKERS SECTION — Full Profile View
+
+When admin clicks on a worker's name, open a full profile modal showing:
+- Avatar (initials + colour)
+- Full name, phone, city, suburb
+- Skills (all tags)
+- Hourly rate
+- Payout method (bank transfer or Flash/Kazang)
+- Bank name and account number (if bank transfer)
+- Flash phone (if Flash/Kazang)
+- SA ID number (masked: show first 6 digits + *****)
+- Rating (stars) and review count
+- Total jobs completed (count from payments table where worker_id matches and status = 'released')
+- Total earned (sum of worker_payout from payments where worker_id matches)
+- Registration date
+- Reviews section: list of all reviews for this worker showing homeowner name, star rating, comment, date
+- ID Document upload status (show "Not uploaded" for now — we will add upload later)
+
+Action buttons on the profile modal:
+- "Verify" (green) — sets is_verified = true
+- "Suspend" (amber) — sets a new column is_suspended = true (add this column to workers table)
+- "Remove" (red) — deletes worker after confirmation
+- "Send Message" (blue) — opens a simple text input to send an email/WhatsApp to the worker
+
+Add is_suspended column to workers table:
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false;
+
+Suspended workers should show an amber "Suspended" badge instead of green "Verified".
+
+## 2. JOBS SECTION — Full Job Details
+
+When admin clicks on a job title, open a full job detail modal showing:
+- Job title, category badge, status badge
+- Full description
+- Budget
+- Location (suburb, city)
+- Posted by (homeowner name)
+- Date posted
+- Date hired (if applicable)
+- Date completed (if applicable)
+- All applications for this job:
+  * Applicant name, phone, proposed rate, message, status (pending/accepted/declined)
+- Payment info (if payment exists): amount paid, platform fee, payout method, status
+
+Action buttons:
+- "Remove Job" (red) — deletes job after confirmation
+- "Flag as Inappropriate" (amber) — sets a new column is_flagged = true
+
+Add is_flagged column to jobs table:
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
+
+Flagged jobs show an amber "Flagged" badge on the jobs list.
+
+## 3. APPLICATIONS SECTION — Full Application Details
+
+When admin clicks on an application, open a detail modal showing:
+- Job title (clickable link to job detail)
+- Worker name and phone
+- Homeowner name
+- Application message
+- Proposed rate
+- Date applied
+- Status badge
+- Payment status (if payment exists for this job)
+
+## 4. PAYMENTS SECTION — Enhanced Controls
+
+Add these action buttons to each payment row:
+- "Release" (green) — manually set payment status to 'released' (for stuck payments)
+- "Refund" (red) — set payment status to 'refunded' and show refund confirmation
+- "Flag Dispute" (amber) — set payment status to 'disputed'
+
+Add a disputes section at top of payments tab if any payments have status = 'disputed':
+- Show disputed payments highlighted in red
+- Each has "Resolve — Pay Worker" and "Resolve — Refund Homeowner" buttons
+
+## 5. DASHBOARD OVERVIEW — Real-time Stats & Alerts
+
+Add these to the overview:
+- "Active Jobs Right Now" — count of jobs with status = 'open'
+- "In Escrow Right Now" — sum of amount from payments where status = 'held'
+- "Alerts" section:
+  * Jobs open for more than 7 days (created_at < now - 7 days and status = 'open')
+  * Payments held for more than 3 days (created_at < now - 3 days and status = 'held')
+  * Workers with 0 reviews but verified
+  * Show each alert as a card with amber background
+
+## 6. ADMIN NAVIGATION
+
+Add a breadcrumb at top of each section so admin knows where they are:
+Admin → Workers → [Worker Name]
+Admin → Jobs → [Job Title]
+
+## IMPORTANT
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Run these SQL commands in Supabase before building:
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
+
+Keep the existing navy/blue/amber design system.
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.
