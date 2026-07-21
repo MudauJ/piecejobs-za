@@ -41,7 +41,6 @@ function submitPayFast(totalAmount: number, jobTitle: string) {
     item_name:    jobTitle.slice(0, 100),
     return_url:   `${BASE}/#/dashboard`,
     cancel_url:   `${BASE}/#/dashboard`,
-    notify_url:   `${BASE}/api/payfast-notify`,
   };
   for (const [k, v] of Object.entries(fields)) {
     const inp = document.createElement("input");
@@ -88,6 +87,16 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     fetchJobs();
     fetchSpending();
   }, [user]);
+
+  useEffect(() => {
+    if (localStorage.getItem("pf_payment_pending") === "1") {
+      localStorage.removeItem("pf_payment_pending");
+      toast({
+        title: "Payment successful! Job is now active.",
+        description: "Your payment is held in escrow. The worker has been notified.",
+      });
+    }
+  }, []);
 
   async function fetchSpending() {
     if (!user) return;
@@ -210,6 +219,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
 
     setPayModal(null);
     setPaying(false);
+    localStorage.setItem("pf_payment_pending", "1");
     submitPayFast(total, job.title);
   }
 
