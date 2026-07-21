@@ -65,14 +65,14 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
     },
   });
 
-  async function queueNotifications(jobId: string, city: string, jobTitle: string, suburb: string, budget: number) {
+  async function queueNotifications(jobId: string, city: string, category: string, suburb: string, budget: number) {
     try {
       const wRes = await fetch(
-        `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(city)}&is_verified=eq.true&select=id`,
+        `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(city)}&is_verified=eq.true&select=id,city`,
         { headers: sbHeaders() },
       );
       if (!wRes.ok) return;
-      const workers = await wRes.json() as { id: string }[];
+      const workers = await wRes.json() as { id: string; city: string }[];
       await Promise.all(workers.map(w =>
         fetch(`${SB_URL}/rest/v1/notifications_queue`, {
           method: "POST",
@@ -80,8 +80,9 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
           body: JSON.stringify({
             worker_id: w.id,
             job_id:    jobId,
-            message:   `New job in ${city}: "${jobTitle}" at ${suburb} — Budget R${budget}. Open PieceJobs ZA to apply!`,
+            message:   `New ${category} job in ${suburb}, ${city} — R${budget}. Tap to view.`,
             status:    "pending",
+            channel:   "bell",
           }),
         }),
       ));
@@ -148,7 +149,7 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
     });
 
     if (jobId) {
-      queueNotifications(jobId, values.city, values.title, values.suburb, values.budget);
+      queueNotifications(jobId, values.city, values.category, values.suburb, values.budget);
       if (user.email) {
         queueEmail(user.email, values.title, values.city, values.suburb, values.budget);
       }
