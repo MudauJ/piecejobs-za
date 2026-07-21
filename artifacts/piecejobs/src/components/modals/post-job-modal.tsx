@@ -67,14 +67,21 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
 
   async function queueNotifications(jobId: string, city: string, category: string, suburb: string, budget: number) {
     try {
+      console.log('Queueing notifications for city:', city);
       const wRes = await fetch(
         `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(city)}&is_verified=eq.true&select=id,city`,
         { headers: sbHeaders() },
       );
-      if (!wRes.ok) return;
+      console.log('Workers fetch status:', wRes.status);
+      if (!wRes.ok) {
+        console.log('Workers fetch failed:', await wRes.text());
+        return;
+      }
       const workers = await wRes.json() as { id: string; city: string }[];
-      await Promise.all(workers.map(w =>
-        fetch(`${SB_URL}/rest/v1/notifications_queue`, {
+      console.log('Verified workers found:', workers.length, workers);
+      await Promise.all(workers.map(async w => {
+        console.log('Inserting notification for worker:', w.id);
+        const res = await fetch(`${SB_URL}/rest/v1/notifications_queue`, {
           method: "POST",
           headers: sbHeaders({ "Prefer": "return=minimal" }),
           body: JSON.stringify({
@@ -84,10 +91,11 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
             status:    "pending",
             channel:   "bell",
           }),
-        }),
-      ));
-    } catch {
-      // notifications are best-effort
+        });
+        console.log('Notification insert status:', res.status, await res.text());
+      }));
+    } catch (err) {
+      console.log('queueNotifications error:', err);
     }
   }
 
@@ -149,6 +157,7 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
     });
 
     if (jobId) {
+      console.log('Job saved successfully, now queueing notifications...');
       queueNotifications(jobId, values.city, values.category, values.suburb, values.budget);
       if (user.email) {
         queueEmail(user.email, values.title, values.city, values.suburb, values.budget);
