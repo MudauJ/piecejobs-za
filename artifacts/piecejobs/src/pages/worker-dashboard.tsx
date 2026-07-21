@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, type Notification, CATEGORIES, CITIES } from "@/lib/supabase";
+import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, type Notification, CATEGORIES, CITIES, getBadgeInfo } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useHashLocation } from "wouter/use-hash-location";
 import {
@@ -37,6 +37,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
 
   const [editSuburb, setEditSuburb]           = useState("");
   const [editCity, setEditCity]               = useState("");
@@ -121,6 +122,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
           job_city:     p.jobs?.city     ?? "",
           job_category: p.jobs?.category ?? "",
         })));
+        setCompletedCount(ep.filter(p => p.status === "released").length);
       }
 
       const docsRes = await fetch(
@@ -311,7 +313,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                               ✓ Verified
                             </span>
                           )}
-                          <WorkerBadgePill badge={worker.badge} />
+                          <WorkerBadgePill count={completedCount} />
                         </div>
                       </div>
                       {!editing && (
@@ -808,15 +810,20 @@ function EarningsTab({ earnings }: { earnings: EarningRow[] }) {
   );
 }
 
-function WorkerBadgePill({ badge }: { badge?: string }) {
-  const b = badge === "diamond" ? { emoji: "💎", label: "Diamond", color: "bg-sky-50 text-sky-800 border-sky-200" }
-    : badge === "gold"    ? { emoji: "🥇", label: "Gold",    color: "bg-amber-50 text-amber-800 border-amber-200" }
-    : badge === "silver"  ? { emoji: "🥈", label: "Silver",  color: "bg-slate-50 text-slate-700 border-slate-200" }
-    : badge === "bronze"  ? { emoji: "🥉", label: "Bronze",  color: "bg-orange-50 text-orange-800 border-orange-200" }
-    : { emoji: "⭐", label: "New Worker", color: "bg-purple-50 text-purple-700 border-purple-200" };
+function WorkerBadgePill({ count }: { count: number }) {
+  if (count === 0) return null;
+  const info = getBadgeInfo(count);
+  if (info.level === "new") return null;
+  const colorMap: Record<string, string> = {
+    diamond: "bg-sky-50 text-sky-800 border-sky-200",
+    gold:    "bg-amber-50 text-amber-800 border-amber-200",
+    silver:  "bg-slate-50 text-slate-700 border-slate-200",
+    bronze:  "bg-orange-50 text-orange-800 border-orange-200",
+  };
+  const color = colorMap[info.level] ?? "bg-purple-50 text-purple-700 border-purple-200";
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full border mt-1 ${b.color}`}>
-      {b.emoji} {b.label}
+    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full border mt-1 ${color}`}>
+      {info.emoji} {info.label}
     </span>
   );
 }
