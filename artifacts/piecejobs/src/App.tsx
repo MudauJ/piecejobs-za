@@ -12,6 +12,7 @@ import Register from "@/pages/register";
 import Admin from "@/pages/admin";
 import Dashboard from "@/pages/dashboard";
 import WorkerDashboard from "@/pages/worker-dashboard";
+import WorkerDocuments from "@/pages/worker-documents";
 import NotFound from "@/pages/not-found";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
@@ -134,6 +135,11 @@ function AppRoutes({
           <Shell modalState={modalState} setModalState={setModalState}>
             <WorkerDashboard setModalState={setModalState} />
           </Shell>
+        </ProtectedRoute>
+      )} />
+      <Route path="/worker-documents" component={() => (
+        <ProtectedRoute requiredRole="worker">
+          <WorkerDocuments />
         </ProtectedRoute>
       )} />
 

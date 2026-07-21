@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import { useHashLocation } from "wouter/use-hash-location";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
@@ -21,6 +22,7 @@ type EarningRow = Payment & { job_title?: string; job_suburb?: string; job_city?
 
 export default function WorkerDashboard({ setModalState }: { setModalState: React.Dispatch<React.SetStateAction<ModalState>> }) {
   const { user, profile }       = useAuth();
+  const [, setLocation]         = useHashLocation();
   const [tab, setTab]           = useState<Tab>("profile");
   const [worker, setWorker]     = useState<Worker | null>(null);
   const [applications, setApplications] = useState<AppWithJob[]>([]);
@@ -370,17 +372,26 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                         <div className="col-span-2 border-t border-border pt-5">
                           <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-3">My Documents</p>
                           {documents.length === 0 ? (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-sm font-semibold text-amber-800">Upload your documents to get verified faster</p>
-                                <p className="text-xs text-amber-700 mt-0.5">
-                                  Register again from the landing page to add your SA ID, proof of residence, and profile photo.
-                                </p>
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-sm font-semibold text-amber-800">Upload your documents to get verified faster</p>
+                                  <p className="text-xs text-amber-700 mt-0.5">Your SA ID and proof of residence help us verify you quickly.</p>
+                                </div>
                               </div>
+                              <Button size="sm" className="shrink-0 font-bold text-white text-xs"
+                                style={{ background: "#2D7DD2" }}
+                                onClick={() => setLocation("/worker-documents")}>
+                                Upload Documents
+                              </Button>
                             </div>
                           ) : (
                             <div className="space-y-2">
+                              <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-green-700">
+                                <CheckCircle2 className="h-4 w-4" />
+                                Documents submitted — pending review by admin
+                              </div>
                               {documents.map(doc => (
                                 <div key={doc.id} className="flex items-center justify-between bg-muted/30 rounded-lg border border-border px-3 py-2.5">
                                   <div>
@@ -397,9 +408,11 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                                       <ExternalLink className="h-3 w-3" />View
                                     </Button>
                                     {doc.status === "rejected" && (
-                                      <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
-                                        <UploadCloud className="h-3 w-3" />Re-upload via registration
-                                      </span>
+                                      <Button size="sm" className="h-7 text-xs font-bold text-white"
+                                        style={{ background: "#2D7DD2" }}
+                                        onClick={() => setLocation("/worker-documents")}>
+                                        <UploadCloud className="h-3 w-3 mr-1" />Re-upload
+                                      </Button>
                                     )}
                                   </div>
                                 </div>

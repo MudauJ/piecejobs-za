@@ -1,0 +1,36 @@
+Documents are uploading to Supabase Storage successfully but the records are not being saved to the worker_documents table after upload.
+
+Fix the document upload function to save a record to worker_documents table after each successful storage upload:
+
+After each file uploads successfully to storage, immediately do this insert:
+
+const saveDoc = await fetch(
+  'https://vnrvwfialfvduvetoewa.supabase.co/rest/v1/worker_documents',
+  {
+    method: 'POST',
+    headers: {
+      'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w',
+      'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w',
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({
+      worker_id: workerId,
+      document_type: documentType, // 'id_document', 'proof_of_residence', 'profile_photo'
+      file_url: publicUrl,
+      file_name: fileName,
+      status: 'pending'
+    })
+  }
+);
+console.log('Document record save status:', saveDoc.status);
+const saveDocText = await saveDoc.text();
+console.log('Document record save response:', saveDocText);
+
+Also fix the confusing message on the worker dashboard. Change it to:
+- If worker HAS uploaded documents: show "Documents submitted — pending review by admin"
+- If worker has NOT uploaded documents: show amber warning "Upload your documents to get verified faster" with a button "Upload Documents" that takes them to a document upload page at /#/worker-documents
+
+Also fix the worker_id being passed — make sure it's the workers table ID (from the workers table), not the auth user ID. First fetch the worker record where user_id = auth user ID to get the correct workers.id.
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

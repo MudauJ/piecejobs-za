@@ -117,7 +117,28 @@ export default function Register() {
     setSlot: React.Dispatch<React.SetStateAction<DocSlot>>,
     file: File,
   ) {
-    if (!userId || !workerId) return;
+    if (!userId) return;
+
+    // Resolve the workers-table UUID — the Supabase client insert may not return it
+    // if RLS or client config blocks the select, so we fall back to a direct fetch.
+    let resolvedWorkerId = workerId;
+    if (!resolvedWorkerId) {
+      const wRes = await fetch(
+        `${SB_URL}/rest/v1/workers?user_id=eq.${userId}&select=id&limit=1`,
+        { headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } },
+      );
+      if (wRes.ok) {
+        const rows = await wRes.json() as { id: string }[];
+        resolvedWorkerId = rows[0]?.id ?? null;
+        if (resolvedWorkerId) setWorkerId(resolvedWorkerId);
+      }
+    }
+
+    if (!resolvedWorkerId) {
+      setSlot(prev => ({ ...prev, status: "error", error: "Worker profile not found — please refresh and try again." }));
+      return;
+    }
+
     const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
     setSlot({ file, previewUrl: preview, status: "uploading", fileUrl: "", error: "" });
 
@@ -140,12 +161,12 @@ export default function Register() {
 
       if (!storageRes.ok) {
         const msg = await storageRes.text();
-        throw new Error(msg);
+        throw new Error(`Storage error (${storageRes.status}): ${msg}`);
       }
 
       const publicUrl = `${SB_URL}/storage/v1/object/public/worker-documents/${path}`;
 
-      await fetch(`${SB_URL}/rest/v1/worker_documents`, {
+      const saveDoc = await fetch(`${SB_URL}/rest/v1/worker_documents`, {
         method: "POST",
         headers: {
           "apikey": SB_KEY,
@@ -154,13 +175,20 @@ export default function Register() {
           "Prefer": "return=minimal",
         },
         body: JSON.stringify({
-          worker_id:     workerId,
+          worker_id:     resolvedWorkerId,
           document_type: docType,
           file_url:      publicUrl,
           file_name:     file.name,
           status:        "pending",
         }),
       });
+      console.log("Document record save status:", saveDoc.status);
+      const saveDocText = await saveDoc.text();
+      console.log("Document record save response:", saveDocText);
+
+      if (!saveDoc.ok) {
+        throw new Error(`DB save failed (${saveDoc.status}): ${saveDocText}`);
+      }
 
       setSlot(prev => ({ ...prev, status: "done", fileUrl: publicUrl }));
     } catch (err) {
