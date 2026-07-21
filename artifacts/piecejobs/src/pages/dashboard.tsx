@@ -170,6 +170,11 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     const fee       = Math.round(jobAmount * 0.15);
     const total     = jobAmount + fee;
 
+    console.log("Starting payment flow...");
+    console.log("Job ID:", job.id);
+    console.log("User ID:", user?.id);
+    console.log("Amount:", total);
+
     let workerId: string | null = null;
     let payoutMethod = "bank";
     if (app.applicant_id) {
@@ -180,21 +185,34 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
       }
     }
 
-    await sbFetch("payments", {
-      method: "POST",
-      headers: { "Prefer": "return=minimal" },
-      body: JSON.stringify({
-        job_id:          job.id,
-        homeowner_email: profile?.full_name ?? "",
-        homeowner_id:    user!.id,
-        worker_id:       workerId,
-        amount:          total,
-        platform_fee:    fee,
-        worker_payout:   jobAmount,
-        payout_method:   payoutMethod,
-        status:          "held",
-      }),
-    });
+    const paymentPayload = {
+      job_id:          job.id,
+      homeowner_email: profile?.full_name ?? "",
+      homeowner_id:    user!.id,
+      worker_id:       workerId,
+      amount:          total,
+      platform_fee:    fee,
+      worker_payout:   jobAmount,
+      payout_method:   payoutMethod,
+      status:          "held",
+    };
+    console.log("Inserting payment record...", paymentPayload);
+
+    let insertResponse: Response;
+    try {
+      insertResponse = await sbFetch("payments", {
+        method: "POST",
+        headers: { "Prefer": "return=representation" },
+        body: JSON.stringify(paymentPayload),
+      });
+      console.log("Payment insert response status:", insertResponse.status);
+      const responseText = await insertResponse.text();
+      console.log("Payment insert response body:", responseText);
+    } catch (error) {
+      console.log("Payment insert error:", error);
+      setPaying(false);
+      return;
+    }
 
     await Promise.all([
       sbFetch(`applications?id=eq.${app.id}`, {
