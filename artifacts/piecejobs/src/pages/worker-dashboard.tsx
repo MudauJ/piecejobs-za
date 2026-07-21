@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase, type Worker, type Job, type Application, type Payment, CATEGORIES, CITIES } from "@/lib/supabase";
+import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, CATEGORIES, CITIES } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp, MessageCircle } from "lucide-react";
+import { MapPin, Pencil, Save, X, Briefcase, CheckCircle2, Clock, XCircle, TrendingUp, MessageCircle, AlertTriangle, FileText, ExternalLink, UploadCloud } from "lucide-react";
 import type { ModalState } from "@/App";
 import { ChatModal } from "@/components/chat-modal";
 
@@ -26,6 +26,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [applications, setApplications] = useState<AppWithJob[]>([]);
   const [matchingJobs, setMatchingJobs] = useState<Job[]>([]);
   const [earnings, setEarnings]         = useState<EarningRow[]>([]);
+  const [documents, setDocuments]       = useState<WorkerDocument[]>([]);
   const [chatJob, setChatJob]           = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
@@ -105,6 +106,12 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
           job_category: p.jobs?.category ?? "",
         })));
       }
+
+      const docsRes = await fetch(
+        `${SB_URL}/rest/v1/worker_documents?worker_id=eq.${w.id}&order=uploaded_at.desc`,
+        { headers },
+      );
+      if (docsRes.ok) setDocuments(await docsRes.json() as WorkerDocument[]);
     }
 
     setLoading(false);
@@ -356,6 +363,47 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
                             <div className="text-sm">
                               <span className="font-semibold">Cash Voucher (Flash/Kazang)</span>
                               {worker.flash_phone && <span className="text-muted-foreground"> — {worker.flash_phone}</span>}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="col-span-2 border-t border-border pt-5">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-3">My Documents</p>
+                          {documents.length === 0 ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-semibold text-amber-800">Upload your documents to get verified faster</p>
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  Register again from the landing page to add your SA ID, proof of residence, and profile photo.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {documents.map(doc => (
+                                <div key={doc.id} className="flex items-center justify-between bg-muted/30 rounded-lg border border-border px-3 py-2.5">
+                                  <div>
+                                    <p className="text-sm font-semibold capitalize">{doc.document_type.replace(/_/g, " ")}</p>
+                                    <p className="text-xs text-muted-foreground">{new Date(doc.uploaded_at).toLocaleDateString("en-ZA")}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs font-bold rounded-full px-2.5 py-0.5 capitalize ${
+                                      doc.status === "approved" ? "bg-green-50 text-green-700 border border-green-200" :
+                                      doc.status === "rejected" ? "bg-red-50 text-red-600 border border-red-200" :
+                                      "bg-amber-50 text-amber-700 border border-amber-200"
+                                    }`}>{doc.status}</span>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => window.open(doc.file_url, "_blank")}>
+                                      <ExternalLink className="h-3 w-3" />View
+                                    </Button>
+                                    {doc.status === "rejected" && (
+                                      <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                                        <UploadCloud className="h-3 w-3" />Re-upload via registration
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

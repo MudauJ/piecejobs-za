@@ -83,6 +83,18 @@ export type UserProfile = {
   created_at: string;
 };
 
+export type WorkerDocument = {
+  id: string;
+  worker_id: string;
+  document_type: string;
+  file_url: string;
+  file_name?: string;
+  status: string;
+  uploaded_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+};
+
 export const CATEGORIES = [
   "Cleaning",
   "Garden",

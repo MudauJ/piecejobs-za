@@ -1,0 +1,85 @@
+Add document upload functionality to PieceJobs ZA for worker verification.
+
+## DATABASE
+Run this SQL in Supabase:
+
+CREATE TABLE IF NOT EXISTS worker_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  worker_id UUID REFERENCES workers(id),
+  document_type TEXT NOT NULL, -- 'id_document', 'passport', 'proof_of_residence'
+  file_url TEXT NOT NULL,
+  file_name TEXT,
+  status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by TEXT
+);
+
+ALTER TABLE worker_documents DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON worker_documents TO anon, authenticated;
+
+## SUPABASE STORAGE
+Create a storage bucket called 'worker-documents' in Supabase Storage. Set it to public so files can be viewed by admin.
+
+## WORKER REGISTRATION — Document Upload Step
+After the basic registration form, add a second step for document upload:
+
+Step 1: Basic info (existing form — name, email, password, skills, location, rate)
+Step 2: Document upload with these three upload fields:
+
+1. SA ID / Passport
+   - Label: "ID Document or Passport *"
+   - Accept: images (jpg, png) and PDF
+   - Required
+   - Show preview thumbnail after upload
+
+2. Proof of Residence
+   - Label: "Proof of Residence *"
+   - Accept: images and PDF
+   - Required
+   - Note: "Utility bill, bank statement, or lease agreement not older than 3 months"
+   - Show preview thumbnail after upload
+
+3. Profile Photo (optional)
+   - Label: "Profile Photo (optional)"
+   - Accept: images only (jpg, png)
+   - Show circular preview after upload
+
+Upload flow:
+- On file select, immediately upload to Supabase Storage bucket 'worker-documents' using the worker's user ID as folder: worker-documents/{userId}/{document_type}/{filename}
+- After upload, save the file URL to worker_documents table
+- Show upload progress indicator
+- Show green checkmark when upload complete
+- Show error message if upload fails
+
+Add a "Skip for now" option that allows registration to complete without documents (worker profile will show "Documents pending" status in admin)
+
+## WORKER PROFILE — Document Status
+In the worker dashboard (My Profile tab), show a "My Documents" section:
+- SA ID/Passport: show status badge (Pending/Approved/Rejected) and upload date
+- Proof of Residence: show status badge and upload date  
+- Profile Photo: show current photo or initials avatar
+- "Re-upload" button if document was rejected
+- If no documents uploaded: show amber warning "Upload your documents to get verified faster"
+
+## ADMIN — Document Review
+In the admin Workers section, on the worker full profile modal:
+- Show "Documents" section with all uploaded documents
+- Each document shows: document type, upload date, status badge
+- "View Document" button — opens the file in a new tab
+- "Approve" button (green) — sets document status to 'approved'
+- "Reject" button (red) — sets document status to 'rejected', shows reason input
+- When all documents are approved, show "Ready to Verify" button that sets is_verified = true
+- Show document count badge on the Workers tab: "3 pending documents"
+
+## IMPORTANT
+Use Supabase Storage JS client for file uploads:
+- Upload URL pattern: https://vnrvwfialfvduvetoewa.supabase.co/storage/v1/object/worker-documents/{path}
+- Use the anon key for authorization
+- Make files publicly accessible
+
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

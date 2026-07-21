@@ -40,6 +40,7 @@ type PaymentRow = Payment & { job_title?: string; job_city?: string };
 type WorkerFull = Worker & { is_suspended?: boolean };
 type JobFull   = Job   & { is_flagged?: boolean };
 type Review    = { id: string; worker_id: string; job_id?: string; reviewer_name?: string; rating: number; comment?: string; created_at: string };
+type WorkerDoc = { id: string; worker_id: string; document_type: string; file_url: string; file_name?: string; status: string; uploaded_at: string };
 
 export default function Admin() {
   const { signOut } = useAuth();
@@ -52,6 +53,7 @@ export default function Admin() {
   const [applications, setApplications] = useState<(Application & { job_title?: string; job_poster?: string })[]>([]);
   const [payments, setPayments]       = useState<PaymentRow[]>([]);
 
+  const [pendingDocs, setPendingDocs]         = useState(0);
   const [selectedWorker, setSelectedWorker] = useState<WorkerFull | null>(null);
   const [selectedJob, setSelectedJob]       = useState<JobFull | null>(null);
   const [selectedApp, setSelectedApp]       = useState<(Application & { job_title?: string; job_poster?: string }) | null>(null);
@@ -73,6 +75,8 @@ export default function Admin() {
     setWorkers(wkData);
     setApplications(appsData);
     setPayments(paysData);
+    const docsRaw = await sbGet<{ id: string }>("worker_documents?status=eq.pending&select=id");
+    setPendingDocs(docsRaw.length);
     setStats({ jobs: jobsData.length, workers: wkData.length, applications: appsData.length, pending: wkData.filter(w => !w.is_verified).length, platformEarnings: earnings });
     setLoading(false);
   }
@@ -142,8 +146,11 @@ export default function Admin() {
             <button key={n.key} onClick={() => setSection(n.key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${section === n.key ? "bg-white/15 text-white" : "text-white/60 hover:text-white hover:bg-white/8"}`}>
               {n.icon}{n.label}
-              {n.key === "workers" && stats.pending > 0 && (
-                <span className="ml-auto text-xs font-bold bg-amber-400 text-amber-900 rounded-full px-1.5 py-0.5">{stats.pending}</span>
+              {n.key === "workers" && (stats.pending > 0 || pendingDocs > 0) && (
+                <span className="ml-auto flex items-center gap-1">
+                  {stats.pending > 0 && <span className="text-xs font-bold bg-amber-400 text-amber-900 rounded-full px-1.5 py-0.5">{stats.pending}</span>}
+                  {pendingDocs > 0  && <span className="text-xs font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5">📄{pendingDocs}</span>}
+                </span>
               )}
               {n.key === "payments" && payments.filter(p => p.status === "disputed").length > 0 && (
                 <span className="ml-auto text-xs font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5">{payments.filter(p => p.status === "disputed").length}</span>
@@ -369,6 +376,7 @@ function WorkerProfileModal({ worker, payments, onVerify, onSuspend, onRemove, o
   onClose: () => void;
 }) {
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [docs, setDocs]       = useState<WorkerDoc[]>([]);
   const [msgText, setMsgText] = useState("");
 
   const fetchReviews = useCallback(async () => {
@@ -376,7 +384,21 @@ function WorkerProfileModal({ worker, payments, onVerify, onSuspend, onRemove, o
     setReviews(data);
   }, [worker.id]);
 
-  useEffect(() => { fetchReviews(); }, [fetchReviews]);
+  const fetchDocs = useCallback(async () => {
+    const data = await sbGet<WorkerDoc>(`worker_documents?worker_id=eq.${worker.id}&order=uploaded_at.desc`);
+    setDocs(data);
+  }, [worker.id]);
+
+  useEffect(() => { fetchReviews(); fetchDocs(); }, [fetchReviews, fetchDocs]);
+
+  async function approveDoc(id: string) {
+    await sbPatch("worker_documents", id, { status: "approved", reviewed_at: new Date().toISOString() });
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, status: "approved" } : d));
+  }
+  async function rejectDoc(id: string) {
+    await sbPatch("worker_documents", id, { status: "rejected", reviewed_at: new Date().toISOString() });
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, status: "rejected" } : d));
+  }
 
   const workerPays = payments.filter(p => p.worker_id === worker.id);
   const jobsDone   = workerPays.filter(p => p.status === "released").length;
@@ -443,7 +465,6 @@ function WorkerProfileModal({ worker, payments, onVerify, onSuspend, onRemove, o
           {worker.payout_method === "flash"  && <Detail label="Flash Phone" value={worker.flash_phone ?? "—"} />}
           <Detail label="SA ID"        value={maskedId} />
           <Detail label="Registered"   value={new Date(worker.created_at).toLocaleDateString("en-ZA")} />
-          <Detail label="ID Document"  value="Not uploaded" />
         </div>
 
         {/* Skills */}
@@ -454,6 +475,51 @@ function WorkerProfileModal({ worker, payments, onVerify, onSuspend, onRemove, o
               ? <span className="text-sm text-muted-foreground">None listed</span>
               : worker.skills.map(s => <span key={s} className="text-xs font-semibold bg-primary/10 text-primary rounded-full px-2.5 py-1">{s}</span>)}
           </div>
+        </div>
+
+        {/* Documents */}
+        <div className="mt-4 border-t border-border pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-bold text-sm" style={{ color: "#1B2E4B" }}>Documents ({docs.length})</p>
+            {docs.filter(d => d.status === "pending").length > 0 && (
+              <span className="text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5">
+                {docs.filter(d => d.status === "pending").length} pending review
+              </span>
+            )}
+          </div>
+          {docs.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No documents uploaded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {docs.map(d => (
+                <div key={d.id} className="bg-muted/30 rounded-lg border border-border px-3 py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sm capitalize">{d.document_type.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-muted-foreground">{d.file_name ?? "—"} · {new Date(d.uploaded_at).toLocaleDateString("en-ZA")}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs font-bold rounded-full px-2.5 py-0.5 capitalize ${
+                      d.status === "approved" ? "bg-green-50 text-green-700 border border-green-200" :
+                      d.status === "rejected" ? "bg-red-50 text-red-600 border border-red-200" :
+                      "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}>{d.status}</span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(d.file_url, "_blank")}>View</Button>
+                    {d.status !== "approved" && (
+                      <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white font-bold" onClick={() => approveDoc(d.id)}>Approve</Button>
+                    )}
+                    {d.status !== "rejected" && (
+                      <Button size="sm" variant="destructive" className="h-7 text-xs font-bold" onClick={() => rejectDoc(d.id)}>Reject</Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {docs.length > 0 && docs.every(d => d.status === "approved") && !worker.is_verified && (
+            <Button size="sm" className="mt-3 bg-green-600 hover:bg-green-700 text-white font-bold" onClick={() => onVerify(worker.id)}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />All docs approved — Set as Verified
+            </Button>
+          )}
         </div>
 
         {/* Reviews */}
