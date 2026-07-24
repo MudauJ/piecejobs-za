@@ -17,6 +17,9 @@ import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import WorkerAgreement from "@/pages/worker-agreement";
 import HomeownerAgreement from "@/pages/homeowner-agreement";
+import CancellationPolicy from "@/pages/cancellation-policy";
+import RefundPolicy from "@/pages/refund-policy";
+import ServicePolicy from "@/pages/service-policy";
 import NotFound from "@/pages/not-found";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
@@ -168,6 +171,9 @@ function AppRoutes({
       <Route path="/privacy"             component={Privacy} />
       <Route path="/worker-agreement"    component={WorkerAgreement} />
       <Route path="/homeowner-agreement" component={HomeownerAgreement} />
+      <Route path="/cancellation-policy" component={CancellationPolicy} />
+      <Route path="/refund-policy"       component={RefundPolicy} />
+      <Route path="/service-policy"      component={ServicePolicy} />
 
       <Route component={NotFound} />
     </Switch>

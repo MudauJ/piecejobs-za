@@ -5,7 +5,7 @@ export default function Footer() {
   return (
     <footer style={{ background: "#1B2E4B" }} className="text-white pt-14 pb-8">
       <div className="container mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-10 mb-12">
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-5">
               <MapPin className="h-6 w-6 text-white" />
@@ -27,10 +27,19 @@ export default function Footer() {
           <div>
             <h4 className="font-serif font-bold text-white mb-5">Legal</h4>
             <ul className="space-y-3">
-              <li><Link href="/terms"              className="text-sm text-white/55 hover:text-white transition-colors">Terms of Service</Link></li>
-              <li><Link href="/privacy"            className="text-sm text-white/55 hover:text-white transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/worker-agreement"   className="text-sm text-white/55 hover:text-white transition-colors">Worker Agreement</Link></li>
+              <li><Link href="/terms"               className="text-sm text-white/55 hover:text-white transition-colors">Terms of Service</Link></li>
+              <li><Link href="/privacy"             className="text-sm text-white/55 hover:text-white transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/worker-agreement"    className="text-sm text-white/55 hover:text-white transition-colors">Worker Agreement</Link></li>
               <li><Link href="/homeowner-agreement" className="text-sm text-white/55 hover:text-white transition-colors">Homeowner Agreement</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-serif font-bold text-white mb-5">Policies</h4>
+            <ul className="space-y-3">
+              <li><Link href="/cancellation-policy" className="text-sm text-white/55 hover:text-white transition-colors">Cancellation Policy</Link></li>
+              <li><Link href="/refund-policy"        className="text-sm text-white/55 hover:text-white transition-colors">Refund Policy</Link></li>
+              <li><Link href="/service-policy"       className="text-sm text-white/55 hover:text-white transition-colors">Service Delivery Policy</Link></li>
             </ul>
           </div>
         </div>
