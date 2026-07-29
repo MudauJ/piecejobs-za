@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { type Job, type Application, type Payment } from "@/lib/supabase";
-import { openWhatsAppMessage } from "@/lib/whatsapp";
+
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,7 +61,6 @@ type RateModal = {
   jobTitle: string;
   workerId: string;
   workerName: string;
-  workerPhone: string;
   payoutAmount: number;
   payoutMethod: string;
   bankName: string;
@@ -230,10 +229,20 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     patchAppLocally(app.id, { status: "accepted" });
     patchJobLocally(job.id, { status: "hired" });
 
-    openWhatsAppMessage(
-      app.worker_phone,
-      `Great news! Your application for "${job.title}" has been accepted and payment is secured. Please arrive at ${job.suburb} on the agreed time. Good luck!`
-    );
+    // Notify worker via notifications_queue
+    if (workerId) {
+      await sbFetch("notifications_queue", {
+        method: "POST",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          worker_id: workerId,
+          job_id:    job.id,
+          message:   `Great news! Your application for "${job.title}" has been accepted and payment is secured. Please check your dashboard for details.`,
+          status:    "pending",
+        }),
+      });
+    }
+    toast({ title: "Worker accepted!", description: "Payment is in escrow. The worker has been notified via their dashboard." });
 
     setPayModal(null);
     setPaying(false);
@@ -281,7 +290,6 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
             jobTitle:     job.title,
             workerId:     worker.id,
             workerName:   `${worker.first_name} ${worker.last_name}`,
-            workerPhone:  accepted.worker_phone,
             payoutAmount: accepted.proposed_rate,
             payoutMethod: worker.payout_method ?? "bank",
             bankName:     worker.bank_name ?? "",
@@ -318,12 +326,20 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
       });
     }
 
-    if (rateModal.workerPhone) {
-      const payMsg = rateModal.payoutMethod === "flash"
-        ? `Great work on "${rateModal.jobTitle}"! A Flash voucher of R${rateModal.payoutAmount} has been sent to ${rateModal.flashPhone}. Collect your cash at any Kazang till. 🎉`
-        : `Great work on "${rateModal.jobTitle}"! Your payment of R${rateModal.payoutAmount} will be transferred to ${rateModal.bankName || "your bank account"} within 24 hours. 🎉`;
-      openWhatsAppMessage(rateModal.workerPhone, payMsg);
-    }
+    // Notify worker via notifications_queue
+    const payMsg = rateModal.payoutMethod === "flash"
+      ? `Great work on "${rateModal.jobTitle}"! A Flash voucher of R${rateModal.payoutAmount} has been sent to your registered Flash number. Collect your cash at any Kazang till.`
+      : `Great work on "${rateModal.jobTitle}"! Your payment of R${rateModal.payoutAmount} will be transferred to ${rateModal.bankName || "your bank account"} within 24 hours.`;
+    await sbFetch("notifications_queue", {
+      method: "POST",
+      headers: { "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        worker_id: rateModal.workerId,
+        job_id:    rateModal.jobId,
+        message:   payMsg,
+        status:    "pending",
+      }),
+    });
 
     const payoutDesc = rateModal.payoutMethod === "flash"
       ? `A Flash voucher code has been sent to ${rateModal.flashPhone}. The worker can collect R${rateModal.payoutAmount} cash at any Kazang till.`
@@ -407,7 +423,6 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
                         </div>
                         <div>
                           <p className="font-bold text-foreground">{app.worker_name}</p>
-                          <p className="text-sm text-muted-foreground">{app.worker_phone}</p>
                         </div>
                         <span className={`inline-flex text-xs font-bold rounded-full px-2.5 py-1 ${
                           app.status === "accepted" ? "bg-green-50 text-green-700 border border-green-200" :

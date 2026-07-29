@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import { openWhatsAppMessage } from "@/lib/whatsapp";
+
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -78,14 +78,10 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
     } else {
       toast({
         title: "Application sent!",
-        description: "Opening WhatsApp so you can message the homeowner directly.",
+        description: "Check your dashboard for updates.",
       });
       form.reset();
       onOpenChange(false);
-      if (job.contact_number) {
-        const msg = `Hi! I applied for your job "${job.title}" on PieceJobs ZA. Please check your dashboard to review my application.`;
-        openWhatsAppMessage(job.contact_number, msg);
-      }
     }
   }
 
