@@ -18,10 +18,7 @@ async function getAuthUser(req: Request): Promise<{ id: string; role?: string } 
   const token = authHeader.slice(7);
   try {
     const res = await fetch(`${SB_URL}/auth/v1/user`, {
-      headers: {
-        apikey: SB_KEY,
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
     const user = (await res.json()) as { id: string };
@@ -31,12 +28,8 @@ async function getAuthUser(req: Request): Promise<{ id: string; role?: string } 
   }
 }
 
-/**
- * POST /api/send-email
- *
- * Sends a transactional email via Resend.
- * Body: { to: string; subject: string; html: string }
- */
+// ─── POST /api/send-email ─────────────────────────────────────────────────────
+
 router.post("/send-email", async (req: Request, res: Response) => {
   const { to, subject, html } = req.body as {
     to?: string;
@@ -101,134 +94,47 @@ router.post("/send-email", async (req: Request, res: Response) => {
   res.json({ success: sentOk, result: resendResult });
 });
 
-/**
- * POST /api/admin/send-email
- *
- * Admin-only transactional send. The caller must supply a valid Supabase
- * session JWT for a super_admin account. The recipient is resolved
- * server-side from the supplied `targetUserId` so the caller cannot
- * redirect the email to an arbitrary address.
- *
- * Body: { targetUserId: string; subject: string; html: string }
- */
-router.post("/admin/send-email", async (req: Request, res: Response) => {
-  // 1. Authenticate the admin caller
-  const adminUser = await getAuthUser(req);
-  if (!adminUser) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
+// ─── POST /api/send-sms ───────────────────────────────────────────────────────
+
+router.post("/send-sms", async (req: Request, res: Response) => {
+  const { phone, message } = req.body as { phone?: string; message?: string };
+
+  if (!phone || !message) {
+    res.status(400).json({ success: false, error: "Missing phone or message" });
     return;
   }
 
-  // 2. Verify the caller has the super_admin role
-  let callerRole: string | null = null;
+  const tokenId = process.env.VITE_BULKSMS_TOKEN_ID;
+  const tokenSecret = process.env.VITE_BULKSMS_TOKEN_SECRET;
+  if (!tokenId || !tokenSecret) {
+    console.error("[sms] VITE_BULKSMS_TOKEN_ID or VITE_BULKSMS_TOKEN_SECRET not set");
+    res.status(500).json({ success: false, error: "SMS service not configured" });
+    return;
+  }
+
+  const formatted = phone.replace(/\s/g, "").replace(/^0/, "+27");
+  const basicAuth = Buffer.from(`${tokenId}:${tokenSecret}`).toString("base64");
+
   try {
-    const profileRes = await fetch(
-      `${SB_URL}/rest/v1/user_profiles?id=eq.${adminUser.id}&select=role`,
-      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
-    );
-    if (profileRes.ok) {
-      const [row] = (await profileRes.json()) as { role?: string }[];
-      callerRole = row?.role ?? null;
-    }
-  } catch {
-    // fall through — role stays null → 403 below
-  }
-
-  if (callerRole !== "super_admin") {
-    res.status(403).json({ success: false, error: "Forbidden: super_admin only" });
-    return;
-  }
-
-  const { targetUserId, subject, html } = req.body as {
-    targetUserId?: string;
-    subject?: string;
-    html?: string;
-  };
-
-  if (!targetUserId || !subject || !html) {
-    res.status(400).json({ success: false, error: "Missing targetUserId, subject, or html" });
-    return;
-  }
-
-  // 3. Resolve the target worker's email server-side
-  let to: string | null = null;
-  try {
-    const profileRes = await fetch(
-      `${SB_URL}/rest/v1/user_profiles?id=eq.${targetUserId}&select=email`,
-      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
-    );
-    if (profileRes.ok) {
-      const [row] = (await profileRes.json()) as { email?: string }[];
-      to = row?.email ?? null;
-    }
-  } catch {
-    // fall through
-  }
-
-  if (!to) {
-    res.status(400).json({ success: false, error: "No email address on file for target user" });
-    return;
-  }
-
-  const apiKey = process.env.VITE_RESEND_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ success: false, error: "Email service not configured" });
-    return;
-  }
-
-  // 4. Send via Resend
-  let sentOk = false;
-  let resendResult: unknown;
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetch("https://api.bulksms.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Basic ${basicAuth}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+      body: JSON.stringify([{ to: formatted, body: message }]),
     });
-    resendResult = await response.json();
-    sentOk = response.ok;
-    console.log("[admin-email] Resend response:", JSON.stringify(resendResult));
+    const result = await response.json();
+    console.log("[sms] BulkSMS response:", response.status, JSON.stringify(result));
+    res.json({ success: response.status === 201, result });
   } catch (err) {
-    console.error("[admin-email] Resend fetch error:", err);
+    console.error("[sms] BulkSMS fetch error:", err);
+    res.status(500).json({ success: false, error: String(err) });
   }
-
-  // 5. Log to email_notifications (best-effort)
-  try {
-    await fetch(`${SB_URL}/rest/v1/email_notifications`, {
-      method: "POST",
-      headers: {
-        apikey: SB_KEY,
-        Authorization: `Bearer ${SB_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({
-        to_email: to,
-        subject,
-        body: html,
-        status: sentOk ? "sent" : "failed",
-      }),
-    });
-  } catch (err) {
-    console.error("[admin-email] email_notifications log error:", err);
-  }
-
-  res.json({ success: sentOk, result: resendResult });
 });
 
-/**
- * POST /api/admin/send-email
- *
- * Admin-only transactional send. The caller must supply a valid Supabase
- * session JWT for a super_admin account. The recipient is resolved
- * server-side from the supplied `targetUserId` so the caller cannot
- * redirect the email to an arbitrary address.
- *
- * Body: { targetUserId: string; subject: string; html: string }
- */
+// ─── POST /api/admin/send-email ───────────────────────────────────────────────
+
 router.post("/admin/send-email", async (req: Request, res: Response) => {
   // 1. Authenticate the admin caller
   const adminUser = await getAuthUser(req);
