@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 
 const router: IRouter = Router();
 
@@ -8,21 +8,81 @@ const SB_KEY =
 
 const FROM = "PieceJobs ZA <notifications@piecejobsza.co.za>";
 
-router.post("/send-email", async (req, res) => {
-  const { to, subject, html } = req.body as {
-    to?: string;
+/**
+ * Verify the Supabase JWT sent in the Authorization header.
+ * Returns the user row on success, or null if unauthenticated/invalid.
+ */
+async function getAuthUser(req: Request): Promise<{ id: string; role?: string } | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  try {
+    const res = await fetch(`${SB_URL}/auth/v1/user`, {
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) return null;
+    const user = (await res.json()) as { id: string };
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * POST /api/send-email
+ *
+ * Sends a transactional email via Resend.
+ * Requires a valid Supabase session JWT in the Authorization header.
+ * The recipient is derived server-side from the authenticated user's
+ * profile — callers cannot specify arbitrary recipients, preventing
+ * open-relay abuse.
+ *
+ * Body: { subject: string; html: string }
+ */
+router.post("/send-email", async (req: Request, res: Response) => {
+  // Require a valid Supabase session
+  const authUser = await getAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ success: false, error: "Unauthorized" });
+    return;
+  }
+
+  const { subject, html } = req.body as {
     subject?: string;
     html?: string;
   };
 
-  if (!to || !subject || !html) {
-    res.status(400).json({ success: false, error: "Missing to, subject or html" });
+  if (!subject || !html) {
+    res.status(400).json({ success: false, error: "Missing subject or html" });
+    return;
+  }
+
+  // Resolve the recipient from the authenticated user's own profile
+  let to: string | null = null;
+  try {
+    const profileRes = await fetch(
+      `${SB_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=email`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
+    );
+    if (profileRes.ok) {
+      const [row] = (await profileRes.json()) as { email?: string }[];
+      to = row?.email ?? null;
+    }
+  } catch {
+    // fall through
+  }
+
+  if (!to) {
+    res.status(400).json({ success: false, error: "No email address on file for this account" });
     return;
   }
 
   const apiKey = process.env.VITE_RESEND_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ success: false, error: "VITE_RESEND_API_KEY not configured" });
+    res.status(500).json({ success: false, error: "Email service not configured" });
     return;
   }
 
