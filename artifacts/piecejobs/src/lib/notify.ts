@@ -40,6 +40,7 @@ async function sendEmail(
   subject: string,
   htmlBody: string
 ): Promise<boolean> {
+  console.log("Sending email to:", to, "subject:", subject);
   if (!to || !to.includes("@")) return false;
   const key = import.meta.env.VITE_RESEND_API_KEY as string | undefined;
   if (!key) {
