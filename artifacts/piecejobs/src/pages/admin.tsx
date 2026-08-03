@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
-import { type Job, type Worker, type Application, type Payment, type EmailNotification, CATEGORY_EMOJI, getBadgeInfo } from "@/lib/supabase";
+import { type Job, type Worker, type Application, type Payment, type EmailNotification, CATEGORY_EMOJI, getBadgeInfo, supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +15,7 @@ import {
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
+import { notifyWorkerVerified } from "@/lib/notify";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
@@ -104,9 +105,22 @@ export default function Admin() {
   }
 
   async function verifyWorker(id: string) {
-    await sbPatch("workers", id, { is_verified: true });
+    const res = await sbPatch("workers", id, { is_verified: true });
+    if (!res.ok) return;
     setWorkers(prev => prev.map(w => w.id === id ? { ...w, is_verified: true } : w));
     setStats(s => ({ ...s, pending: Math.max(0, s.pending - 1) }));
+    const worker = workers.find(w => w.id === id);
+    if (worker?.user_id) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const adminToken = sessionData?.session?.access_token;
+      if (adminToken) {
+        notifyWorkerVerified({
+          workerUserId: worker.user_id,
+          workerName: `${worker.first_name} ${worker.last_name}`.trim(),
+          adminToken,
+        });
+      }
+    }
   }
   async function suspendWorker(id: string, suspended: boolean) {
     await sbPatch("workers", id, { is_suspended: suspended });

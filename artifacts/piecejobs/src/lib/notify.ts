@@ -130,6 +130,45 @@ export async function notifyWorkerPaymentReleased(opts: {
   );
 }
 
+// ─── Event 5: Worker account verified → email worker (admin-triggered) ────────
+
+const ADMIN_EMAIL_ENDPOINT = "https://piece-jobs-za.replit.app/api/admin/send-email";
+
+export async function notifyWorkerVerified(opts: {
+  workerUserId: string;
+  workerName: string;
+  adminToken: string;
+}) {
+  try {
+    const html = wrapHtml(`
+      <h2 style="color:#1B2E4B;margin:0 0 16px 0;">Great news, ${opts.workerName}! 🎉</h2>
+      <p style="color:#374151;line-height:1.6;">Your PieceJobs account has been <strong>verified</strong> by our team. You're all set to start applying for jobs in your area.</p>
+      <p style="color:#374151;line-height:1.6;">Browse available jobs now and submit your application — homeowners are looking for skilled workers like you!</p>
+      <a href="https://piecejobsza.co.za/#/jobs"
+         style="background:#10B981;color:white;padding:12px 28px;text-decoration:none;border-radius:6px;display:inline-block;margin-top:16px;font-weight:bold;font-size:15px;">
+        Browse Jobs &amp; Apply Now
+      </a>
+      <p style="color:#6B7280;font-size:13px;margin-top:24px;">Good luck out there — the PieceJobs ZA team is rooting for you.</p>
+    `);
+    const response = await fetch(ADMIN_EMAIL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${opts.adminToken}`,
+      },
+      body: JSON.stringify({
+        targetUserId: opts.workerUserId,
+        subject: "✅ Your PieceJobs account is verified — start applying!",
+        html,
+      }),
+    });
+    const result = await response.json();
+    console.log("[notify] verifyWorker email result:", result);
+  } catch (err) {
+    console.error("[notify] notifyWorkerVerified error:", err);
+  }
+}
+
 // ─── Event 4: New job posted → email verified workers in city ─────────────────
 
 export async function notifyWorkersNewJob(opts: {
