@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { type Job, type Application, type Payment } from "@/lib/supabase";
+import { playNotificationSound } from "@/lib/notification-sound";
 
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
   const [paying, setPaying]       = useState(false);
   const [dashTab, setDashTab]     = useState<DashTab>("jobs");
   const [spending, setSpending]   = useState<SpendRow[]>([]);
+  const prevAppCount = useRef<number | null>(null); // null = not yet initialised
   const [spendLoading, setSpendLoading] = useState(false);
   const [chatJob, setChatJob]     = useState<{ jobId: string; jobTitle: string; workerName: string } | null>(null);
 
@@ -85,6 +87,26 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     if (!user) return;
     fetchJobs();
     fetchSpending();
+  }, [user]);
+
+  // Play sound when total application count across all jobs increases
+  useEffect(() => {
+    const total = jobs.reduce((sum, j) => sum + (j.applications?.length ?? 0), 0);
+    if (prevAppCount.current === null) {
+      prevAppCount.current = total;
+      return;
+    }
+    if (total > prevAppCount.current) {
+      playNotificationSound();
+    }
+    prevAppCount.current = total;
+  }, [jobs]);
+
+  // Poll for new applications every 30 seconds
+  useEffect(() => {
+    if (!user) return;
+    const id = setInterval(fetchJobs, 30_000);
+    return () => clearInterval(id);
   }, [user]);
 
   useEffect(() => {

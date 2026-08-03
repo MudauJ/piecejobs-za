@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, type Worker, type Job, type Application, type Payment, type WorkerDocument, type Notification, CATEGORIES, CITIES, getBadgeInfo } from "@/lib/supabase";
+import { playNotificationSound } from "@/lib/notification-sound";
 import { useAuth } from "@/lib/auth";
 import { useHashLocation } from "wouter/use-hash-location";
 import {
@@ -33,6 +34,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [documents, setDocuments]       = useState<WorkerDocument[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen]         = useState(false);
+  const prevNotifCount = useRef<number | null>(null); // null = not yet initialised
   const [chatJob, setChatJob]           = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
@@ -51,6 +53,45 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   useEffect(() => {
     if (!user) return;
     fetchAll();
+  }, [user]);
+
+  // Play sound when worker notification count increases (skips the initial load)
+  useEffect(() => {
+    if (prevNotifCount.current === null) {
+      // First data load — record baseline, don't play sound
+      prevNotifCount.current = notifications.length;
+      return;
+    }
+    if (notifications.length > prevNotifCount.current) {
+      playNotificationSound();
+    }
+    prevNotifCount.current = notifications.length;
+  }, [notifications]);
+
+  // Poll for new notifications every 30 seconds
+  useEffect(() => {
+    if (!user) return;
+    const headers = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` };
+
+    async function pollNotifications() {
+      // Need the worker id — derive it from the current worker state
+      const wRes = await fetch(
+        `${SB_URL}/rest/v1/workers?user_id=eq.${user!.id}&select=id&limit=1`,
+        { headers },
+      );
+      if (!wRes.ok) return;
+      const [w] = await wRes.json() as { id: string }[];
+      if (!w?.id) return;
+
+      const r = await fetch(
+        `${SB_URL}/rest/v1/notifications_queue?worker_id=eq.${w.id}&status=eq.pending&order=created_at.desc&limit=20`,
+        { headers },
+      );
+      if (r.ok) setNotifications(await r.json() as Notification[]);
+    }
+
+    const id = setInterval(pollNotifications, 30_000);
+    return () => clearInterval(id);
   }, [user]);
 
   async function fetchAll() {
