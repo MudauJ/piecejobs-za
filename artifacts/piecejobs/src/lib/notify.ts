@@ -53,28 +53,22 @@ function wrapHtml(body: string): string {
 /**
  * Core send function — POSTs to the API server which calls Resend server-side.
  */
-async function sendEmail(
-  to: string,
-  subject: string,
-  htmlBody: string
-): Promise<boolean> {
-  console.log("Sending email to:", to, "subject:", subject);
-  if (!to || !to.includes("@")) return false;
-
+const sendEmail = async (to: string, subject: string, htmlBody: string): Promise<boolean> => {
   try {
-    const response = await fetch(EMAIL_ENDPOINT, {
+    console.log("Sending email to:", to, "subject:", subject);
+    const response = await fetch("https://piece-jobs-za.replit.app/api/send-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, subject, html: wrapHtml(htmlBody) }),
+      body: JSON.stringify({ to, subject, html: htmlBody }),
     });
     const result = await response.json();
     console.log("Email result:", result);
-    return result.success === true;
+    return result.success;
   } catch (error) {
-    console.error("Email send error:", error);
+    console.error("[notify] email send error:", error);
     return false;
   }
-}
+};
 
 // ─── Event 1: Worker applies → email homeowner ───────────────────────────────
 
