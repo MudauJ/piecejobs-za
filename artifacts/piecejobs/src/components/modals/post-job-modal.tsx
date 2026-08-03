@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Lock, CheckCircle2, ChevronRight, ChevronLeft } from "lucide-react";
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnJ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
 
 const TIME_SLOTS: string[] = [];
 for (let h = 7; h <= 18; h++) {
@@ -117,14 +117,17 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
     return step2Keys().reduce((s, k) => s + (Number(getDetail(k).budget) || 0), 0);
   }
 
-  async function queueNotifications(jobId: string, label: string, budget: number) {
+  async function queueNotifications(jobId: string, label: string, budget: number, jobCity: string, jobSuburb: string) {
     try {
-      const r = await fetch(
-        `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(city)}&is_verified=eq.true&select=id`,
-        { headers: sbHeaders() },
-      );
-      if (!r.ok) return;
+      const url = `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(jobCity)}&is_verified=eq.true&select=id`;
+      console.log("[PieceJobs] queueNotifications → fetching workers:", url);
+      const r = await fetch(url, { headers: sbHeaders() });
+      if (!r.ok) {
+        console.error("[PieceJobs] queueNotifications workers fetch failed:", r.status, await r.text());
+        return;
+      }
       const workers = await r.json() as { id: string }[];
+      console.log("[PieceJobs] queueNotifications → notifying", workers.length, "workers for job", jobId);
       await Promise.all(workers.map(w =>
         fetch(`${SB_URL}/rest/v1/notifications_queue`, {
           method: "POST",
@@ -132,13 +135,15 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
           body: JSON.stringify({
             worker_id: w.id,
             job_id: jobId,
-            message: `New ${label} job in ${suburb}, ${city} — R${budget}. Tap to view.`,
+            message: `New ${label} job in ${jobSuburb}, ${jobCity} — R${budget}. Tap to view.`,
             status: "pending",
             channel: "bell",
           }),
+        }).then(async nr => {
+          if (!nr.ok) console.error("[PieceJobs] notification insert failed:", nr.status, await nr.text());
         }),
       ));
-    } catch { /* best-effort */ }
+    } catch (e) { console.error("[PieceJobs] queueNotifications error:", e); }
   }
 
   async function handlePost() {
@@ -156,25 +161,31 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
         posted_by: userId ?? null,
       };
 
+      console.log("[PieceJobs] handlePost start — isBundle:", analysis.isBundle, "city:", city, "suburb:", suburb);
+
       if (analysis.isBundle) {
         const detail = getDetail("bundle");
         const title  = autoTitle(selected);
+        const insertBody = {
+          ...sharedFields,
+          title,
+          category: selected[0],
+          categories: selected,
+          booking_type: selected.length === 1 ? "single" : "bundle",
+          description: detail.description,
+          budget: Number(detail.budget),
+        };
+        console.log("[PieceJobs] inserting bundle job →", JSON.stringify(insertBody));
         const r = await fetch(`${SB_URL}/rest/v1/jobs`, {
           method: "POST",
           headers: sbHeaders({ "Prefer": "return=representation" }),
-          body: JSON.stringify({
-            ...sharedFields,
-            title,
-            category: selected[0],
-            categories: selected,
-            booking_type: selected.length === 1 ? "single" : "bundle",
-            description: detail.description,
-            budget: Number(detail.budget),
-          }),
+          body: JSON.stringify(insertBody),
         });
-        if (!r.ok) throw new Error(await r.text());
-        const [created] = await r.json() as { id: string }[];
-        if (created?.id) queueNotifications(created.id, title, Number(detail.budget));
+        const rawText = await r.text();
+        console.log("[PieceJobs] jobs insert response:", r.status, rawText);
+        if (!r.ok) throw new Error(`jobs insert failed (${r.status}): ${rawText}`);
+        const [created] = JSON.parse(rawText) as { id: string }[];
+        if (created?.id) queueNotifications(created.id, title, Number(detail.budget), city, suburb);
 
         toast({
           title: selected.length > 1 ? "Bundle job posted! 📦" : "Job posted!",
@@ -188,34 +199,40 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
         for (const group of analysis.groups) {
           const detail = getDetail(group.name);
           const title  = autoTitle(group.categories);
+          const insertBody = {
+            ...sharedFields,
+            title,
+            category: group.categories[0],
+            categories: group.categories,
+            booking_type: "multi",
+            parent_job_id: createdIds[0] ?? null,
+            description: detail.description,
+            budget: Number(detail.budget),
+          };
+          console.log(`[PieceJobs] inserting multi job group "${group.name}" →`, JSON.stringify(insertBody));
           const r = await fetch(`${SB_URL}/rest/v1/jobs`, {
             method: "POST",
             headers: sbHeaders({ "Prefer": "return=representation" }),
-            body: JSON.stringify({
-              ...sharedFields,
-              title,
-              category: group.categories[0],
-              categories: group.categories,
-              booking_type: "multi",
-              parent_job_id: createdIds[0] ?? null,
-              description: detail.description,
-              budget: Number(detail.budget),
-            }),
+            body: JSON.stringify(insertBody),
           });
-          if (!r.ok) throw new Error(await r.text());
-          const [created] = await r.json() as { id: string }[];
+          const rawText = await r.text();
+          console.log(`[PieceJobs] jobs insert response (group ${group.name}):`, r.status, rawText);
+          if (!r.ok) throw new Error(`jobs insert failed for "${group.name}" (${r.status}): ${rawText}`);
+          const [created] = JSON.parse(rawText) as { id: string }[];
           if (created?.id) {
             createdIds.push(created.id);
-            queueNotifications(created.id, group.categories.join(" + "), Number(detail.budget));
+            queueNotifications(created.id, group.categories.join(" + "), Number(detail.budget), city, suburb);
           }
         }
-        // Make the first job also reference the group root
+        // Back-fill parent_job_id on the first job to point to itself
         if (createdIds.length > 1 && createdIds[0]) {
-          await fetch(`${SB_URL}/rest/v1/jobs?id=eq.${createdIds[0]}`, {
+          console.log("[PieceJobs] patching parent_job_id on first job", createdIds[0]);
+          const pr = await fetch(`${SB_URL}/rest/v1/jobs?id=eq.${createdIds[0]}`, {
             method: "PATCH",
             headers: sbHeaders({ "Prefer": "return=minimal" }),
             body: JSON.stringify({ parent_job_id: createdIds[0] }),
           });
+          if (!pr.ok) console.error("[PieceJobs] parent_job_id patch failed:", pr.status, await pr.text());
         }
 
         toast({
@@ -227,6 +244,7 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
       reset();
       onOpenChange(false);
     } catch (err) {
+      console.error("[PieceJobs] handlePost error:", err);
       toast({ title: "Error posting job", description: String(err), variant: "destructive" });
     } finally {
       setSubmitting(false);
