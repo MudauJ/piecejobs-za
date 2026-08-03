@@ -20,7 +20,7 @@ function sbHeaders(extra?: Record<string, string>) {
 async function getProfileEmail(userId: string): Promise<string | null> {
   try {
     const r = await fetch(
-      `${SB_URL}/rest/v1/profiles?id=eq.${userId}&select=email`,
+      `${SB_URL}/rest/v1/user_profiles?id=eq.${userId}&select=email`,
       { headers: sbHeaders() }
     );
     if (!r.ok) return null;
