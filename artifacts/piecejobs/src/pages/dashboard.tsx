@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { type Job, type Application, type Payment } from "@/lib/supabase";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { notifyWorkerAccepted, notifyWorkerPaymentReleased } from "@/lib/notify";
 
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ type RateModal = {
   jobId: string;
   jobTitle: string;
   workerId: string;
+  workerUserId: string;
   workerName: string;
   payoutAmount: number;
   payoutMethod: string;
@@ -264,6 +266,16 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
         }),
       });
     }
+    // Email worker (fire-and-forget)
+    if (app.applicant_id) {
+      notifyWorkerAccepted({
+        workerUserId: app.applicant_id,
+        workerName:   app.worker_name,
+        jobTitle:     job.title,
+        suburb:       job.suburb,
+        city:         job.city,
+      });
+    }
     toast({ title: "Worker accepted!", description: "Payment is in escrow. The worker has been notified via their dashboard." });
 
     setPayModal(null);
@@ -299,11 +311,11 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
     const accepted = job.applications.find(a => a.status === "accepted");
     if (accepted?.applicant_id) {
       const r = await sbFetch(
-        `workers?user_id=eq.${accepted.applicant_id}&select=id,first_name,last_name,payout_method,bank_name,flash_phone`
+        `workers?user_id=eq.${accepted.applicant_id}&select=id,user_id,first_name,last_name,payout_method,bank_name,flash_phone`
       );
       if (r.ok) {
         const [worker] = await r.json() as {
-          id: string; first_name: string; last_name: string;
+          id: string; user_id?: string; first_name: string; last_name: string;
           payout_method?: string; bank_name?: string; flash_phone?: string;
         }[];
         if (worker) {
@@ -311,6 +323,7 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
             jobId:        job.id,
             jobTitle:     job.title,
             workerId:     worker.id,
+            workerUserId: worker.user_id ?? "",
             workerName:   `${worker.first_name} ${worker.last_name}`,
             payoutAmount: accepted.proposed_rate,
             payoutMethod: worker.payout_method ?? "bank",
@@ -362,6 +375,15 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
         status:    "pending",
       }),
     });
+    // Email worker (fire-and-forget)
+    if (rateModal.workerUserId) {
+      notifyWorkerPaymentReleased({
+        workerUserId: rateModal.workerUserId,
+        workerName:   rateModal.workerName,
+        jobTitle:     rateModal.jobTitle,
+        amount:       rateModal.payoutAmount,
+      });
+    }
 
     const payoutDesc = rateModal.payoutMethod === "flash"
       ? `A Flash voucher code has been sent to ${rateModal.flashPhone}. The worker can collect R${rateModal.payoutAmount} cash at any Kazang till.`

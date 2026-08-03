@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useHashLocation } from "wouter/use-hash-location";
 import { supabase, type Job } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import { notifyHomeownerNewApplication } from "@/lib/notify";
 
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
@@ -80,6 +81,15 @@ export default function ApplyJobModal({ jobId, onOpenChange }: Props) {
         title: "Application sent!",
         description: "Check your dashboard for updates.",
       });
+      // Email homeowner (fire-and-forget)
+      if (job.posted_by) {
+        notifyHomeownerNewApplication({
+          homeownerUserId: job.posted_by,
+          homeownerName:   job.poster_name,
+          workerName:      values.worker_name,
+          jobTitle:        job.title,
+        });
+      }
       form.reset();
       onOpenChange(false);
     }

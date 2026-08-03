@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
 import { CATEGORIES, CITIES, CATEGORY_EMOJI, analyzeBooking } from "@/lib/supabase";
+import { notifyWorkersNewJob } from "@/lib/notify";
 import { useAuth } from "@/lib/auth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -185,7 +186,11 @@ export default function PostJobModal({ open, onOpenChange, userId }: Props) {
         console.log("[PieceJobs] jobs insert response:", r.status, rawText);
         if (!r.ok) throw new Error(`jobs insert failed (${r.status}): ${rawText}`);
         const [created] = JSON.parse(rawText) as { id: string }[];
-        if (created?.id) queueNotifications(created.id, title, Number(detail.budget), city, suburb);
+        if (created?.id) {
+          queueNotifications(created.id, title, Number(detail.budget), city, suburb);
+          // Email verified workers in this city (fire-and-forget)
+          notifyWorkersNewJob({ jobId: created.id, categories: selected, suburb, city, budget: Number(detail.budget) });
+        }
 
         toast({
           title: selected.length > 1 ? "Bundle job posted! 📦" : "Job posted!",
