@@ -1,0 +1,115 @@
+Add multi-task booking system to PieceJobs ZA with two booking types.
+
+## DATABASE CHANGES
+Run this SQL in Supabase:
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS categories TEXT[] DEFAULT '{}';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS booking_type TEXT DEFAULT 'single';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_job_id UUID REFERENCES jobs(id);
+
+CREATE TABLE IF NOT EXISTS job_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  description TEXT,
+  estimated_budget INTEGER,
+  assigned_worker_id UUID REFERENCES workers(id),
+  status TEXT DEFAULT 'open',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE job_tasks DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON job_tasks TO anon, authenticated;
+
+## COMPATIBLE TASK GROUPS
+Define which tasks can be done by one worker (bundle) vs need separate workers:
+
+BUNDLE COMPATIBLE (one worker can do all):
+Group 1 — Domestic: Cleaning, Laundry, Dishwashing, Ironing
+Group 2 — Outdoor: Garden, Grass cutting, Pool Cleaning
+Group 3 — Skilled: Painting, Tiling & Grouting
+Group 4 — Care: Dog Walking, Childcare
+Group 5 — Other: Braai Setup, Car Wash, Cooking, Tutoring
+
+NEEDS SEPARATE WORKERS (incompatible with other groups):
+- Plumbing (always separate)
+- Electrical (minor) (always separate)
+- Moving & Lifting (always separate)
+- Any mix across the 5 groups above needs separate workers
+
+## POST A JOB MODAL — Complete Redesign
+
+Replace the single category dropdown with:
+
+Step 1 — Select Tasks:
+- Grid of category cards with checkboxes (all 15 categories shown)
+- Each card shows emoji, category name, checkbox
+- Homeowner can select multiple
+- As they select, show a running list at the bottom: "Selected: Cleaning, Laundry, Grass cutting"
+- Show a smart message below selections:
+  * If all selected tasks are compatible: "✅ One worker can handle all these tasks"
+  * If tasks need different workers: "ℹ️ These tasks need different specialists. We'll create separate jobs for each group."
+
+Step 2 — Job Details:
+- If BUNDLE (one worker): Single description + single budget for all tasks
+- If MULTI-WORKER: Show each task group separately with its own description and budget
+  e.g. "Domestic tasks (Cleaning + Laundry): [description] [budget]"
+       "Outdoor tasks (Garden + Grass cutting): [description] [budget]"
+       "Skilled tasks (Plumbing): [description] [budget]"
+
+Step 3 — Location & Schedule (same as before):
+- Suburb, City, Date, Time, Contact
+
+Step 4 — Review & Post:
+- Show full summary of all tasks, descriptions, budgets
+- Total budget shown
+- "Post Job(s)" button
+
+## JOB CREATION LOGIC
+
+If BUNDLE booking:
+- Create ONE job record with:
+  - categories = array of all selected categories
+  - booking_type = 'bundle'
+  - title = auto-generated e.g. "Cleaning, Laundry & Grass cutting"
+  - budget = combined budget
+
+If MULTI-WORKER booking:
+- Create MULTIPLE job records, one per incompatible group:
+  - Each job has booking_type = 'multi'
+  - Each job has parent_job_id linking them together
+  - Each job has its own category, description, budget
+- Show homeowner: "3 jobs created for your booking"
+
+## JOB BOARD DISPLAY
+
+Update job cards to show multiple categories:
+- Show up to 3 category badges on the card
+- If more than 3: show "Cleaning +2 more"
+- Bundle jobs show a special "📦 Bundle" badge
+- Multi-worker jobs show "👥 Multi-task" badge
+
+## WORKER MATCHING
+
+Workers see jobs where their skills match ANY of the job categories:
+- A worker with [Cleaning, Laundry] skills sees a Cleaning + Laundry + Garden bundle
+- They apply knowing they can do Cleaning and Laundry (garden will need someone else or they can do all if they have the skill)
+
+For bundle jobs: Show worker which tasks they qualify for based on their skills
+e.g. "You qualify for: Cleaning ✅, Laundry ✅, Garden ❌"
+
+## HOMEOWNER DASHBOARD
+
+For multi-worker bookings, group the related jobs together:
+- Show parent booking with all child jobs listed underneath
+- Each child job shows its own status, applications, and hired worker
+- Total spend across all jobs in the booking
+
+## IMPORTANT
+Keep backwards compatibility — existing single-category jobs still work fine.
+
+Use direct fetch to Supabase REST API with hardcoded credentials:
+URL: https://vnrvwfialfvduvetoewa.supabase.co
+KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w
+
+Push to GitHub MudauJ/piecejobs-za on main branch and republish on Replit when done.

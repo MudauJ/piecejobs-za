@@ -102,11 +102,15 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
       if (notifRes.ok) setNotifications(await notifRes.json() as Notification[]);
     }
 
-    const query = supabase.from("jobs").select("*").eq("status", "open").order("created_at", { ascending: false }).limit(20);
-    const { data: jData } = w?.skills?.length
-      ? await query.in("category", w.skills)
-      : await query;
-    setMatchingJobs(jData ?? []);
+    // Fetch open jobs and filter client-side to match both single category and categories array
+    const { data: allJobs } = await supabase.from("jobs").select("*").eq("status", "open").order("created_at", { ascending: false }).limit(60);
+    const jData = w?.skills?.length
+      ? (allJobs ?? []).filter(job => {
+          const jobCats = (job.categories && job.categories.length > 0) ? job.categories : [job.category];
+          return jobCats.some((c: string) => w.skills?.includes(c));
+        }).slice(0, 20)
+      : (allJobs ?? []).slice(0, 20);
+    setMatchingJobs(jData);
 
     if (w) {
       const epRes = await fetch(

@@ -546,7 +546,19 @@ export default function Dashboard({ setModalState }: { setModalState: React.Disp
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold bg-primary/10 text-primary rounded-full px-2.5 py-1">{job.category}</span>
+                      {/* Multi-category badges */}
+                      {(job.categories && job.categories.length > 0 ? job.categories : [job.category]).slice(0, 3).map(cat => (
+                        <span key={cat} className="text-xs font-bold bg-primary/10 text-primary rounded-full px-2.5 py-1">{cat}</span>
+                      ))}
+                      {job.categories && job.categories.length > 3 && (
+                        <span className="text-xs font-bold bg-primary/10 text-primary rounded-full px-2.5 py-1">+{job.categories.length - 3} more</span>
+                      )}
+                      {job.booking_type === "bundle" && (
+                        <span className="text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-1">📦 Bundle</span>
+                      )}
+                      {job.booking_type === "multi" && (
+                        <span className="text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">👥 Multi-task</span>
+                      )}
                       <span className={`text-xs font-bold rounded-full px-2.5 py-1 ${statusBadge(job.status)}`}>{job.status}</span>
                     </div>
                     <h3 className="font-serif text-xl font-bold text-foreground">{job.title}</h3>

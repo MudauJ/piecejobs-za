@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
-import { supabase, type Job, CATEGORIES, CITIES } from "@/lib/supabase";
+import { supabase, type Job, CATEGORIES, CITIES, CATEGORY_EMOJI } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,17 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Users, Search, Flame } from "lucide-react";
 import type { ModalState } from "@/App";
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  "Cleaning":      "🧹",
-  "Garden":        "🌿",
-  "Laundry":       "👕",
-  "Plumbing":      "🔧",
-  "Painting":      "🖌️",
-  "Grass cutting": "✂️",
-  "Dishwashing":   "🍽️",
-  "Moving":        "📦",
-  "Other":         "📋",
-};
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -68,7 +57,10 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
   const filteredJobs = jobs.filter(job => {
     if (!showAll && job.status !== "open") return false;
     if (cityFilter !== "all" && job.city !== cityFilter) return false;
-    if (categoryFilter !== "all" && job.category !== categoryFilter) return false;
+    if (categoryFilter !== "all") {
+      const jobCats = job.categories && job.categories.length > 0 ? job.categories : [job.category];
+      if (!jobCats.includes(categoryFilter)) return false;
+    }
     if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.description ?? "").toLowerCase().includes(search.toLowerCase())) return false;
     if (tab === "today" && new Date(job.created_at) < todayStart) return false;
     if (tab === "urgent" && !job.is_urgent) return false;
@@ -198,7 +190,6 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
         ) : (
           <div className="grid gap-4">
             {filteredJobs.map(job => {
-              const emoji = CATEGORY_EMOJI[job.category] ?? "📋";
               const initials = (job.poster_name ?? "?").charAt(0).toUpperCase();
               return (
                 <div
@@ -210,9 +201,28 @@ export default function Jobs({ setModalState }: { setModalState: React.Dispatch<
                     {/* Left: info */}
                     <div className="flex-1 space-y-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-primary/10 text-primary">
-                          <span>{emoji}</span>{job.category}
-                        </span>
+                        {/* Category badges: show up to 3, collapse rest */}
+                        {(job.categories && job.categories.length > 0 ? job.categories : [job.category]).slice(0, 3).map(cat => (
+                          <span key={cat} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-primary/10 text-primary">
+                            <span>{CATEGORY_EMOJI[cat] ?? "📋"}</span>{cat}
+                          </span>
+                        ))}
+                        {job.categories && job.categories.length > 3 && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary">
+                            {job.categories[0]} +{job.categories.length - 1} more
+                          </span>
+                        )}
+                        {/* Booking type badges */}
+                        {job.booking_type === "bundle" && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            📦 Bundle
+                          </span>
+                        )}
+                        {job.booking_type === "multi" && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            👥 Multi-task
+                          </span>
+                        )}
                         {job.is_urgent && (
                           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-600 border border-red-200">
                             <Flame className="h-3 w-3" />Urgent

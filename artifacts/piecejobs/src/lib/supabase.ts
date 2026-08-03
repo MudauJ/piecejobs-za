@@ -13,6 +13,9 @@ export type Job = {
   id: string;
   title: string;
   category: string;
+  categories?: string[];
+  booking_type?: string;
+  parent_job_id?: string;
   description: string;
   budget: number;
   suburb: string;
@@ -123,6 +126,7 @@ export const CATEGORIES = [
   "Cleaning",
   "Garden",
   "Laundry",
+  "Ironing",
   "Plumbing",
   "Painting",
   "Grass cutting",
@@ -130,13 +134,72 @@ export const CATEGORIES = [
   "Moving",
   "Braai Setup",
   "Car Wash",
+  "Cooking",
   "Dog Walking",
+  "Childcare",
   "Tutoring",
   "Pool Cleaning",
   "Tiling & Grouting",
   "Electrical (minor)",
   "Other",
 ];
+
+export const CATEGORY_EMOJI: Record<string, string> = {
+  "Cleaning":          "🧹",
+  "Garden":            "🌿",
+  "Laundry":           "👕",
+  "Ironing":           "👔",
+  "Plumbing":          "🔧",
+  "Painting":          "🖌️",
+  "Grass cutting":     "✂️",
+  "Dishwashing":       "🍽️",
+  "Moving":            "📦",
+  "Braai Setup":       "🍖",
+  "Car Wash":          "🚗",
+  "Cooking":           "🍳",
+  "Dog Walking":       "🐕",
+  "Childcare":         "👶",
+  "Tutoring":          "📚",
+  "Pool Cleaning":     "🏊",
+  "Tiling & Grouting": "🪟",
+  "Electrical (minor)":"⚡",
+  "Other":             "📋",
+};
+
+export const COMPATIBLE_GROUPS: { name: string; categories: string[] }[] = [
+  { name: "Domestic",      categories: ["Cleaning", "Laundry", "Dishwashing", "Ironing"] },
+  { name: "Outdoor",       categories: ["Garden", "Grass cutting", "Pool Cleaning"] },
+  { name: "Skilled",       categories: ["Painting", "Tiling & Grouting"] },
+  { name: "Care",          categories: ["Dog Walking", "Childcare"] },
+  { name: "Other Services",categories: ["Braai Setup", "Car Wash", "Cooking", "Tutoring"] },
+];
+
+export const ALWAYS_SEPARATE = ["Plumbing", "Electrical (minor)", "Moving"];
+
+export function analyzeBooking(selected: string[]): {
+  isBundle: boolean;
+  groups: { name: string; categories: string[] }[];
+} {
+  if (selected.length === 0) return { isBundle: false, groups: [] };
+
+  const alwaysSep = selected.filter(c => ALWAYS_SEPARATE.includes(c));
+  const rest      = selected.filter(c => !ALWAYS_SEPARATE.includes(c));
+
+  const groupMap = new Map<string, string[]>();
+  for (const cat of rest) {
+    const group = COMPATIBLE_GROUPS.find(g => g.categories.includes(cat));
+    const key   = group?.name ?? "Other Services";
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(cat);
+  }
+
+  const groups: { name: string; categories: string[] }[] = [];
+  for (const [name, cats] of groupMap) groups.push({ name, categories: cats });
+  for (const cat of alwaysSep)        groups.push({ name: cat, categories: [cat] });
+
+  const isBundle = alwaysSep.length === 0 && groupMap.size <= 1;
+  return { isBundle, groups };
+}
 
 export type BadgeLevel = "new" | "bronze" | "silver" | "gold" | "diamond";
 
