@@ -1,11 +1,16 @@
 /**
- * Email notification helpers — Resend API via VITE_RESEND_API_KEY
+ * Email notification helpers — proxied through the PieceJobs API server.
  * All functions are fire-and-forget (they log errors but never throw).
+ *
+ * The API server at /api/send-email handles the Resend call server-side
+ * to avoid browser CORS restrictions.
  */
 
 const SB_URL = "https://vnrvwfialfvduvetoewa.supabase.co";
 const SB_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucnZ3ZmlhbGZ2ZHV2ZXRvZXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTUzMjYsImV4cCI6MjA5ODMzMTMyNn0.5mfElVG_tuhBLLP4BKdQ7v5zXLIi51LpMbZUmKZ8A9w";
+
+const EMAIL_ENDPOINT = "https://piece-jobs-za.replit.app/api/send-email";
 
 function sbHeaders(extra?: Record<string, string>) {
   return {
@@ -16,7 +21,7 @@ function sbHeaders(extra?: Record<string, string>) {
   };
 }
 
-/** Fetch the email address for a Supabase auth user from the profiles table. */
+/** Fetch the email address for a Supabase auth user from the user_profiles table. */
 async function getProfileEmail(userId: string): Promise<string | null> {
   try {
     const r = await fetch(
@@ -31,9 +36,22 @@ async function getProfileEmail(userId: string): Promise<string | null> {
   }
 }
 
+/** Branded email wrapper applied to every outgoing message. */
+function wrapHtml(body: string): string {
+  return `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="background: #1B2E4B; padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">📍 PieceJobs ZA</h1>
+      <p style="color: #F5A623; margin: 5px 0 0 0; font-size: 14px;">Local work, done by local people</p>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">${body}</div>
+    <div style="background: #1B2E4B; padding: 15px; text-align: center;">
+      <p style="color: rgba(255,255,255,0.6); margin: 0; font-size: 12px;">© 2026 PieceJobs ZA | <a href="https://piecejobsza.co.za" style="color: #F5A623;">piecejobsza.co.za</a></p>
+    </div>
+  </div>`;
+}
+
 /**
- * Core send function.
- * Sends via Resend, then logs to email_notifications table.
+ * Core send function — POSTs to the API server which calls Resend server-side.
  */
 async function sendEmail(
   to: string,
@@ -42,62 +60,20 @@ async function sendEmail(
 ): Promise<boolean> {
   console.log("Sending email to:", to, "subject:", subject);
   if (!to || !to.includes("@")) return false;
-  const key = import.meta.env.VITE_RESEND_API_KEY as string | undefined;
-  if (!key) {
-    console.warn("[notify] VITE_RESEND_API_KEY not set — skipping email");
-    return false;
-  }
 
-  let sentOk = false;
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetch(EMAIL_ENDPOINT, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "PieceJobs ZA <notifications@piecejobsza.co.za>",
-        to: [to],
-        subject,
-        html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #1B2E4B; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">📍 PieceJobs ZA</h1>
-            <p style="color: #F5A623; margin: 5px 0 0 0; font-size: 14px;">Local work, done by local people</p>
-          </div>
-          <div style="padding: 30px; background: #ffffff;">
-            ${htmlBody}
-          </div>
-          <div style="background: #1B2E4B; padding: 15px; text-align: center;">
-            <p style="color: rgba(255,255,255,0.6); margin: 0; font-size: 12px;">© 2026 PieceJobs ZA | <a href="https://piecejobsza.co.za" style="color: #F5A623;">piecejobsza.co.za</a></p>
-          </div>
-        </div>`,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, subject, html: wrapHtml(htmlBody) }),
     });
     const result = await response.json();
-    console.log("[notify] email sent:", result);
-    sentOk = response.ok;
-  } catch (err) {
-    console.error("[notify] email send error:", err);
+    console.log("Email result:", result);
+    return result.success === true;
+  } catch (error) {
+    console.error("Email send error:", error);
+    return false;
   }
-
-  // Log to email_notifications table (best-effort)
-  try {
-    await fetch(`${SB_URL}/rest/v1/email_notifications`, {
-      method: "POST",
-      headers: sbHeaders({ Prefer: "return=minimal" }),
-      body: JSON.stringify({
-        to_email: to,
-        subject,
-        body: htmlBody,
-        status: sentOk ? "sent" : "failed",
-      }),
-    });
-  } catch (err) {
-    console.error("[notify] email_notifications log error:", err);
-  }
-
-  return sentOk;
 }
 
 // ─── Event 1: Worker applies → email homeowner ───────────────────────────────
@@ -170,7 +146,6 @@ export async function notifyWorkersNewJob(opts: {
   budget: number;
 }) {
   try {
-    // Fetch verified workers in the same city with email from profiles
     const r = await fetch(
       `${SB_URL}/rest/v1/workers?city=eq.${encodeURIComponent(opts.city)}&is_verified=eq.true&select=id,first_name,last_name,user_id`,
       { headers: sbHeaders() }
