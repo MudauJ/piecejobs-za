@@ -67,6 +67,7 @@ export default function Register() {
       id:        uid,
       role,
       full_name: fullName,
+      email,
       phone,
       city,
       suburb,
