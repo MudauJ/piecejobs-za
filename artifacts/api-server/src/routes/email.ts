@@ -113,19 +113,22 @@ router.post("/send-sms", async (req: Request, res: Response) => {
   }
 
   const formatted = phone.replace(/\s/g, "").replace(/^0/, "+27");
-  const basicAuth = Buffer.from(`${tokenId}:${tokenSecret}`).toString("base64");
+  const credentials = Buffer.from(`${tokenId}:${tokenSecret}`).toString("base64");
+
+  console.log("[sms] Sending SMS to:", formatted);
 
   try {
     const response = await fetch("https://api.bulksms.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Basic ${basicAuth}`,
+        Authorization: `Basic ${credentials}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify([{ to: formatted, body: message }]),
     });
-    const result = await response.json();
-    console.log("[sms] BulkSMS response:", response.status, JSON.stringify(result));
+    const responseText = await response.text();
+    console.log("[sms] BulkSMS status:", response.status, "response:", responseText);
+    const result = responseText ? (JSON.parse(responseText) as unknown) : {};
     res.json({ success: response.status === 201, result });
   } catch (err) {
     console.error("[sms] BulkSMS fetch error:", err);
