@@ -1,13 +1,21 @@
+// Extend Window to hold the pre-unlocked AudioContext
+declare global {
+  interface Window {
+    unlockedAudioContext?: AudioContext;
+  }
+}
+
 /**
- * Plays a soft bell/ding using the Web Audio API — no external file needed.
- * Safe to call freely; silently no-ops if the browser blocks AudioContext.
+ * Plays a soft bell/ding using the Web Audio API.
+ * Reuses window.unlockedAudioContext if available (unlocked by a prior user click).
  */
 export function playNotificationSound(): void {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
+    const AudioCtx = window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
 
-    const ctx        = new AudioCtx();
+    const ctx = window.unlockedAudioContext || new AudioCtx();
+
     const oscillator = ctx.createOscillator();
     const gainNode   = ctx.createGain();
 
@@ -15,18 +23,15 @@ export function playNotificationSound(): void {
     gainNode.connect(ctx.destination);
 
     oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1);
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
 
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
 
     oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.5);
-
-    // Clean up after the sound finishes
-    oscillator.onended = () => ctx.close();
-  } catch {
-    // Browser may block AudioContext without a prior user gesture — fail silently
+    oscillator.stop(ctx.currentTime + 0.6);
+  } catch (e) {
+    console.log("Audio play failed:", e);
   }
 }

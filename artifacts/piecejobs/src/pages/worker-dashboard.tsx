@@ -34,7 +34,7 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
   const [documents, setDocuments]       = useState<WorkerDocument[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen]         = useState(false);
-  const prevNotifCount = useRef<number | null>(null); // null = not yet initialised
+  const prevNotifCount = useRef<number>(0);
   const [chatJob, setChatJob]           = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
@@ -55,17 +55,27 @@ export default function WorkerDashboard({ setModalState }: { setModalState: Reac
     fetchAll();
   }, [user]);
 
-  // Play sound when worker notification count increases (skips the initial load)
+  // Unlock AudioContext on first user click so subsequent sounds can play
   useEffect(() => {
-    if (prevNotifCount.current === null) {
-      // First data load — record baseline, don't play sound
-      prevNotifCount.current = notifications.length;
-      return;
-    }
-    if (notifications.length > prevNotifCount.current) {
+    const unlockAudio = () => {
+      const AudioCtx = window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioContext = new AudioCtx();
+      audioContext.resume();
+      window.unlockedAudioContext = audioContext;
+      document.removeEventListener("click", unlockAudio);
+    };
+    document.addEventListener("click", unlockAudio);
+    return () => document.removeEventListener("click", unlockAudio);
+  }, []);
+
+  // Play sound when notification count increases
+  useEffect(() => {
+    const count = notifications.length;
+    if (count > prevNotifCount.current) {
       playNotificationSound();
     }
-    prevNotifCount.current = notifications.length;
+    prevNotifCount.current = count;
   }, [notifications]);
 
   // Poll for new notifications every 30 seconds
