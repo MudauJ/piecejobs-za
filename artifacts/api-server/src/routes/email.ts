@@ -246,4 +246,27 @@ router.post("/admin/send-email", async (req: Request, res: Response) => {
   res.json({ success: sentOk, result: resendResult });
 });
 
+// ─── GET /api/check-sms-balance ──────────────────────────────────────────────
+
+router.get("/check-sms-balance", async (req: Request, res: Response) => {
+  const tokenId = process.env.VITE_BULKSMS_TOKEN_ID;
+  const tokenSecret = process.env.VITE_BULKSMS_TOKEN_SECRET;
+  if (!tokenId || !tokenSecret) {
+    res.status(500).json({ error: "SMS credentials not configured" });
+    return;
+  }
+  const credentials = Buffer.from(`${tokenId}:${tokenSecret}`).toString("base64");
+  try {
+    const response = await fetch("https://api.bulksms.com/v1/profile", {
+      headers: { Authorization: `Basic ${credentials}` },
+    });
+    const result = await response.json();
+    console.log("[sms] balance check:", response.status, JSON.stringify(result));
+    res.json(result);
+  } catch (err) {
+    console.error("[sms] balance check error:", err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;
