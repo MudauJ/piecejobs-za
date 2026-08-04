@@ -35,7 +35,7 @@ async function sbPatch(table: string, id: string, body: Record<string, unknown>)
   });
 }
 
-type Section = "overview" | "workers" | "jobs" | "applications" | "payments" | "messages" | "notifications" | "emails" | "analytics";
+type Section = "overview" | "workers" | "homeowners" | "jobs" | "applications" | "payments" | "messages" | "notifications" | "emails" | "analytics" | "users";
 type Stats = { jobs: number; workers: number; applications: number; pending: number; platformEarnings: number };
 type PaymentRow   = Payment & { job_title?: string; job_city?: string };
 type WorkerFull   = Worker & { is_suspended?: boolean };
@@ -44,6 +44,19 @@ type Review       = { id: string; worker_id: string; job_id?: string; reviewer_n
 type WorkerDoc    = { id: string; worker_id: string; document_type: string; file_url: string; file_name?: string; status: string; uploaded_at: string };
 type MessageRow   = { id: string; job_id: string; sender_id?: string; sender_name?: string; sender_role?: string; content: string; created_at: string; job_title?: string };
 type NotifRow     = { id: string; worker_id: string; job_id?: string; message: string; status: string; created_at: string; worker_name?: string; job_title?: string };
+type HomeownerProfile = {
+  id: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  suburb?: string;
+  role: string;
+  is_suspended?: boolean;
+  created_at: string;
+};
 
 export default function Admin() {
   const { signOut } = useAuth();
@@ -58,11 +71,13 @@ export default function Admin() {
   const [emailNotifications, setEmailNotifications] = useState<EmailNotification[]>([]);
   const [messages, setMessages]       = useState<MessageRow[]>([]);
   const [notifQueue, setNotifQueue]   = useState<NotifRow[]>([]);
+  const [homeowners, setHomeowners]   = useState<HomeownerProfile[]>([]);
 
   const [pendingDocs, setPendingDocs]         = useState(0);
-  const [selectedWorker, setSelectedWorker] = useState<WorkerFull | null>(null);
-  const [selectedJob, setSelectedJob]       = useState<JobFull | null>(null);
-  const [selectedApp, setSelectedApp]       = useState<(Application & { job_title?: string; job_poster?: string }) | null>(null);
+  const [selectedWorker, setSelectedWorker]   = useState<WorkerFull | null>(null);
+  const [selectedJob, setSelectedJob]         = useState<JobFull | null>(null);
+  const [selectedApp, setSelectedApp]         = useState<(Application & { job_title?: string; job_poster?: string }) | null>(null);
+  const [selectedHomeowner, setSelectedHomeowner] = useState<HomeownerProfile | null>(null);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -100,6 +115,9 @@ export default function Admin() {
       worker_name: n.workers ? `${n.workers.first_name} ${n.workers.last_name}` : "Unknown",
       job_title:   n.jobs?.title ?? "—",
     })));
+    const homeownersData = await sbGet<HomeownerProfile>("user_profiles?role=eq.homeowner&order=created_at.desc");
+    setHomeowners(homeownersData);
+
     setStats({ jobs: jobsData.length, workers: wkData.length, applications: appsData.length, pending: wkData.filter(w => !w.is_verified).length, platformEarnings: earnings });
     setLoading(false);
   }
@@ -132,6 +150,17 @@ export default function Admin() {
     setWorkers(prev => prev.filter(w => w.id !== id));
     setSelectedWorker(null);
     setStats(s => ({ ...s, workers: s.workers - 1 }));
+  }
+  async function suspendHomeowner(id: string, suspended: boolean) {
+    await sbPatch("user_profiles", id, { is_suspended: suspended });
+    setHomeowners(prev => prev.map(h => h.id === id ? { ...h, is_suspended: suspended } : h));
+    setSelectedHomeowner(prev => prev?.id === id ? { ...prev, is_suspended: suspended } : prev);
+  }
+  async function removeHomeowner(id: string) {
+    if (!confirm("Remove this homeowner? This cannot be undone.")) return;
+    await fetch(`${SB_URL}/rest/v1/user_profiles?id=eq.${id}`, { method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" }) });
+    setHomeowners(prev => prev.filter(h => h.id !== id));
+    setSelectedHomeowner(null);
   }
   async function removeJob(id: string) {
     if (!confirm("Remove this job? This cannot be undone.")) return;
@@ -169,6 +198,7 @@ export default function Admin() {
   const NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: "overview",       label: "Overview",       icon: <LayoutDashboard className="h-4 w-4" /> },
     { key: "workers",        label: "Workers",        icon: <Users            className="h-4 w-4" /> },
+    { key: "homeowners",     label: "Homeowners 🏠",  icon: <Users            className="h-4 w-4" /> },
     { key: "jobs",           label: "Jobs",           icon: <Briefcase        className="h-4 w-4" /> },
     { key: "applications",   label: "Applications",   icon: <FileText         className="h-4 w-4" /> },
     { key: "payments",       label: "Payments",       icon: <CreditCard       className="h-4 w-4" /> },
@@ -176,6 +206,7 @@ export default function Admin() {
     { key: "notifications",  label: "Notifications",  icon: <Bell             className="h-4 w-4" /> },
     { key: "emails",         label: "Emails",         icon: <Mail             className="h-4 w-4" /> },
     { key: "analytics",      label: "Analytics",      icon: <BarChart2        className="h-4 w-4" /> },
+    { key: "users",          label: "Users 👥",        icon: <Users            className="h-4 w-4" /> },
   ];
 
   const breadcrumb = (
@@ -253,8 +284,9 @@ export default function Admin() {
             <div className="space-y-4">{[1,2,3,4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
           ) : (
             <>
-              {section === "overview"      && <OverviewSection stats={stats} jobs={jobs} payments={payments} messages={messages} notifQueue={notifQueue} />}
+              {section === "overview"      && <OverviewSection stats={stats} jobs={jobs} payments={payments} messages={messages} notifQueue={notifQueue} homeowners={homeowners} workers={workers} />}
               {section === "workers"       && <WorkersSection workers={workers} onSelect={setSelectedWorker} onVerify={verifyWorker} onSuspend={suspendWorker} onRemove={removeWorker} />}
+              {section === "homeowners"    && <HomeownersSection homeowners={homeowners} payments={payments} jobs={jobs} onSelect={setSelectedHomeowner} onSuspend={suspendHomeowner} onRemove={removeHomeowner} />}
               {section === "jobs"          && <JobsSection jobs={jobs} onSelect={setSelectedJob} onRemove={removeJob} onFlag={flagJob} />}
               {section === "applications"  && <ApplicationsSection applications={applications} onSelect={setSelectedApp} />}
               {section === "payments"      && <PaymentsSection payments={payments} onPatch={patchPayment} />}
@@ -262,6 +294,7 @@ export default function Admin() {
               {section === "notifications" && <NotificationsSection notifQueue={notifQueue} onMarkAllRead={markAllNotifsRead} onSetQueue={setNotifQueue} />}
               {section === "emails"        && <EmailsSection emails={emailNotifications} onResend={resendEmail} />}
               {section === "analytics"     && <AnalyticsSection jobs={jobs} workers={workers} payments={payments} applications={applications} />}
+              {section === "users"         && <UsersSection homeowners={homeowners} workers={workers} payments={payments} onSuspendHomeowner={suspendHomeowner} onRemoveHomeowner={removeHomeowner} onSelectHomeowner={setSelectedHomeowner} />}
             </>
           )}
         </main>
@@ -293,6 +326,16 @@ export default function Admin() {
           app={selectedApp}
           payments={payments}
           onClose={() => setSelectedApp(null)}
+        />
+      )}
+      {selectedHomeowner && (
+        <HomeownerProfileModal
+          homeowner={selectedHomeowner}
+          payments={payments}
+          jobs={jobs}
+          onSuspend={suspendHomeowner}
+          onRemove={removeHomeowner}
+          onClose={() => setSelectedHomeowner(null)}
         />
       )}
     </div>
@@ -353,9 +396,10 @@ function CatBadges({ job }: { job: JobFull }) {
 
 /* ── Overview ───────────────────────────────────────────────────────────── */
 
-function OverviewSection({ stats, jobs, payments, messages, notifQueue }: {
+function OverviewSection({ stats, jobs, payments, messages, notifQueue, homeowners, workers }: {
   stats: Stats; jobs: JobFull[]; payments: PaymentRow[];
   messages: MessageRow[]; notifQueue: { status: string }[];
+  homeowners: HomeownerProfile[]; workers: WorkerFull[];
 }) {
   const now         = new Date();
   const sevenDays   = new Date(now.getTime() - 7 * 86400000);
@@ -385,6 +429,22 @@ function OverviewSection({ stats, jobs, payments, messages, notifQueue }: {
     ...stalePayments.map(p => ({ type: "pay", msg: `Payment for "${p.job_title}" has been held for more than 3 days`, id: p.id })),
   ];
 
+  // Most active homeowner by jobs posted
+  const homeownerJobCounts: Record<string, number> = {};
+  jobs.forEach(j => { if (j.posted_by) homeownerJobCounts[j.posted_by] = (homeownerJobCounts[j.posted_by] ?? 0) + 1; });
+  const topHomeownerId = Object.entries(homeownerJobCounts).sort((a,b) => b[1]-a[1])[0]?.[0];
+  const topHomeowner = homeowners.find(h => h.id === topHomeownerId);
+  const topHomeownerName = topHomeowner ? (topHomeowner.full_name || `${topHomeowner.first_name ?? ""} ${topHomeowner.last_name ?? ""}`.trim() || topHomeowner.email || "—") : "—";
+
+  // Most active worker by completed jobs (payments released)
+  const workerCompletedCounts: Record<string, number> = {};
+  payments.filter(p => p.status === "released").forEach(p => {
+    if (p.worker_id) workerCompletedCounts[p.worker_id] = (workerCompletedCounts[p.worker_id] ?? 0) + 1;
+  });
+  const topWorkerId = Object.entries(workerCompletedCounts).sort((a,b) => b[1]-a[1])[0]?.[0];
+  const topWorker = workers.find(w => w.id === topWorkerId);
+  const topWorkerName = topWorker ? `${topWorker.first_name} ${topWorker.last_name}`.trim() : "—";
+
   return (
     <div className="space-y-6">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
@@ -393,6 +453,20 @@ function OverviewSection({ stats, jobs, payments, messages, notifQueue }: {
         <StatCard label="Total Applications"    value={stats.applications}     color="#10B981" />
         <StatCard label="Pending Verifications" value={stats.pending}          color="#F5A623" sub="Workers awaiting verification" />
         <StatCard label="Platform Earnings"     value={stats.platformEarnings} color="#7C3AED" prefix="R" sub="From released payments" />
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard label="Total Homeowners"    value={homeowners.length}           color="#2D7DD2" sub="Registered on platform" />
+        <StatCard label="Total Workers"       value={workers.length}              color="#10B981" sub="Registered on platform" />
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="text-sm font-semibold text-muted-foreground">Most Active Homeowner</p>
+          <p className="font-bold text-lg mt-1 truncate" style={{ color: "#1B2E4B" }}>{topHomeownerName}</p>
+          {topHomeownerId && <p className="text-xs text-muted-foreground mt-0.5">{homeownerJobCounts[topHomeownerId]} job{homeownerJobCounts[topHomeownerId] !== 1 ? "s" : ""} posted</p>}
+        </div>
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <p className="text-sm font-semibold text-muted-foreground">Most Active Worker</p>
+          <p className="font-bold text-lg mt-1 truncate" style={{ color: "#1B2E4B" }}>{topWorkerName}</p>
+          {topWorkerId && <p className="text-xs text-muted-foreground mt-0.5">{workerCompletedCounts[topWorkerId]} job{workerCompletedCounts[topWorkerId] !== 1 ? "s" : ""} completed</p>}
+        </div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard label="Active Jobs Right Now"  value={activeJobs}          color="#10B981" sub="Jobs with status = open" />
@@ -1631,6 +1705,363 @@ function AnalyticsSection({
             </BarChart>
           </ResponsiveContainer>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Homeowners Section ─────────────────────────────────────────────────── */
+
+function HomeownersSection({ homeowners, payments, jobs, onSelect, onSuspend, onRemove }: {
+  homeowners: HomeownerProfile[];
+  payments: PaymentRow[];
+  jobs: JobFull[];
+  onSelect: (h: HomeownerProfile) => void;
+  onSuspend: (id: string, suspended: boolean) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const filtered = homeowners.filter(h => {
+    const name = h.full_name || `${h.first_name ?? ""} ${h.last_name ?? ""}`.trim();
+    const q = search.toLowerCase();
+    return !q || name.toLowerCase().includes(q) || (h.email ?? "").toLowerCase().includes(q) || (h.city ?? "").toLowerCase().includes(q);
+  });
+
+  function homeownerStats(h: HomeownerProfile) {
+    const hPayments = payments.filter(p => h.email && p.homeowner_email === h.email);
+    const totalSpent = hPayments.reduce((s, p) => s + p.amount, 0);
+    const completed = hPayments.filter(p => p.status === "released").length;
+    const posted = jobs.filter(j => j.posted_by === h.id).length;
+    return { totalSpent, completed, posted };
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-serif font-bold text-2xl" style={{ color: "#1B2E4B" }}>Homeowners ({homeowners.length})</h2>
+        <input
+          className="border border-border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Search by name, email, city…"
+          value={search} onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                {["Name","Email","Phone","City/Suburb","Member Since","Jobs Posted","Total Spent","Completed","Status","Actions"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">No homeowners found.</td></tr>
+              ) : filtered.map(h => {
+                const name = h.full_name || `${h.first_name ?? ""} ${h.last_name ?? ""}`.trim() || "—";
+                const { totalSpent, completed, posted } = homeownerStats(h);
+                return (
+                  <tr key={h.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <button onClick={() => onSelect(h)} className="font-semibold text-primary hover:underline text-left">{name}</button>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{h.email ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{h.phone ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{[h.suburb, h.city].filter(Boolean).join(", ") || "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{new Date(h.created_at).toLocaleDateString("en-ZA")}</td>
+                    <td className="px-4 py-3 font-semibold text-center">{posted}</td>
+                    <td className="px-4 py-3 font-semibold text-center">R{totalSpent.toLocaleString("en-ZA")}</td>
+                    <td className="px-4 py-3 font-semibold text-center">{completed}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${h.is_suspended ? "bg-red-50 text-red-700 border-red-200" : "bg-green-50 text-green-700 border-green-200"}`}>
+                        {h.is_suspended ? "Suspended" : "Active"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => onSuspend(h.id, !h.is_suspended)}
+                          className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${h.is_suspended ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
+                          {h.is_suspended ? "Restore" : "Suspend"}
+                        </button>
+                        <button onClick={() => onRemove(h.id)} className="text-xs font-bold px-2 py-1 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Homeowner Profile Modal ────────────────────────────────────────────── */
+
+function HomeownerProfileModal({ homeowner, payments, jobs, onSuspend, onRemove, onClose }: {
+  homeowner: HomeownerProfile;
+  payments: PaymentRow[];
+  jobs: JobFull[];
+  onSuspend: (id: string, suspended: boolean) => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}) {
+  const name = homeowner.full_name || `${homeowner.first_name ?? ""} ${homeowner.last_name ?? ""}`.trim() || "—";
+  const hPayments = payments.filter(p => homeowner.email && p.homeowner_email === homeowner.email);
+  const hJobs = jobs.filter(j => j.posted_by === homeowner.id);
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const totalSpent = hPayments.reduce((s, p) => s + p.amount, 0);
+  const monthSpent = hPayments.filter(p => new Date(p.created_at) >= monthStart).reduce((s, p) => s + p.amount, 0);
+  const avgJobValue = hJobs.length > 0 ? Math.round(hJobs.reduce((s, j) => s + (j.budget ?? 0), 0) / hJobs.length) : 0;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-2xl" style={{ color: "#1B2E4B" }}>🏠 {name}</DialogTitle>
+        </DialogHeader>
+
+        {/* Profile details */}
+        <div className="grid sm:grid-cols-2 gap-4 py-2">
+          {[
+            { label: "Email",        value: homeowner.email ?? "—" },
+            { label: "Phone",        value: homeowner.phone ?? "—" },
+            { label: "City",         value: homeowner.city ?? "—" },
+            { label: "Suburb",       value: homeowner.suburb ?? "—" },
+            { label: "Member Since", value: new Date(homeowner.created_at).toLocaleDateString("en-ZA") },
+            { label: "Status",       value: homeowner.is_suspended ? "Suspended" : "Active" },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{label}</span>
+              <span className="text-sm font-semibold">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2">
+          {[
+            { label: "Jobs Posted",    value: hJobs.length,                    color: "#2D7DD2" },
+            { label: "Total Spent",    value: `R${totalSpent.toLocaleString("en-ZA")}`, color: "#7C3AED" },
+            { label: "This Month",     value: `R${monthSpent.toLocaleString("en-ZA")}`, color: "#F5A623" },
+            { label: "Avg Job Value",  value: `R${avgJobValue.toLocaleString("en-ZA")}`, color: "#10B981" },
+          ].map(s => (
+            <div key={s.label} className="bg-muted/30 rounded-xl p-4 text-center">
+              <p className="text-xs font-semibold text-muted-foreground">{s.label}</p>
+              <p className="font-extrabold text-xl mt-1" style={{ color: s.color }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Jobs posted */}
+        <div>
+          <h3 className="font-bold text-base mb-3" style={{ color: "#1B2E4B" }}>Jobs Posted ({hJobs.length})</h3>
+          {hJobs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No jobs posted yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-muted/30 border-b border-border">
+                  {["Title","Status","Budget","Date"].map(h => <th key={h} className="text-left px-3 py-2 text-xs font-bold text-muted-foreground uppercase">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {hJobs.map(j => (
+                    <tr key={j.id} className="border-b border-border/50">
+                      <td className="px-3 py-2 font-semibold">{j.title}</td>
+                      <td className="px-3 py-2"><span className={`text-xs font-bold rounded-full px-2 py-0.5 ${statusBadge(j.status)}`}>{j.status}</span></td>
+                      <td className="px-3 py-2">R{(j.budget ?? 0).toLocaleString("en-ZA")}</td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{new Date(j.created_at).toLocaleDateString("en-ZA")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Payment history */}
+        <div>
+          <h3 className="font-bold text-base mb-3" style={{ color: "#1B2E4B" }}>Payment History ({hPayments.length})</h3>
+          {hPayments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No payments yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-muted/30 border-b border-border">
+                  {["Job","Amount","Platform Fee","Worker Payout","Status","Date"].map(h => <th key={h} className="text-left px-3 py-2 text-xs font-bold text-muted-foreground uppercase whitespace-nowrap">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {hPayments.map(p => (
+                    <tr key={p.id} className="border-b border-border/50">
+                      <td className="px-3 py-2 font-semibold">{p.job_title ?? "—"}</td>
+                      <td className="px-3 py-2">R{p.amount.toLocaleString("en-ZA")}</td>
+                      <td className="px-3 py-2">R{p.platform_fee.toLocaleString("en-ZA")}</td>
+                      <td className="px-3 py-2">R{(p.amount - p.platform_fee).toLocaleString("en-ZA")}</td>
+                      <td className="px-3 py-2"><span className={`text-xs font-bold rounded-full px-2 py-0.5 ${payStatusBadge(p.status)}`}>{p.status}</span></td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{new Date(p.created_at).toLocaleDateString("en-ZA")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-between pt-2 border-t border-border">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => onSuspend(homeowner.id, !homeowner.is_suspended)}
+              className={homeowner.is_suspended ? "border-green-300 text-green-700 hover:bg-green-50" : "border-amber-300 text-amber-700 hover:bg-amber-50"}>
+              <PauseCircle className="h-4 w-4 mr-1.5" />{homeowner.is_suspended ? "Restore Account" : "Suspend Account"}
+            </Button>
+            <Button variant="destructive" onClick={() => { onRemove(homeowner.id); onClose(); }}>
+              <Trash2 className="h-4 w-4 mr-1.5" />Remove Account
+            </Button>
+          </div>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Users Section ──────────────────────────────────────────────────────── */
+
+function UsersSection({ homeowners, workers, payments, onSuspendHomeowner, onRemoveHomeowner, onSelectHomeowner }: {
+  homeowners: HomeownerProfile[];
+  workers: WorkerFull[];
+  payments: PaymentRow[];
+  onSuspendHomeowner: (id: string, suspended: boolean) => void;
+  onRemoveHomeowner: (id: string) => void;
+  onSelectHomeowner: (h: HomeownerProfile) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "homeowner" | "worker">("all");
+
+  type UserRow = {
+    id: string; name: string; email: string; role: "homeowner" | "worker";
+    city: string; memberSince: string; totalTransacted: number;
+    status: string; raw: HomeownerProfile | WorkerFull;
+  };
+
+  const allUsers: UserRow[] = [
+    ...homeowners.map(h => ({
+      id: h.id,
+      name: h.full_name || `${h.first_name ?? ""} ${h.last_name ?? ""}`.trim() || h.email || "—",
+      email: h.email ?? "—",
+      role: "homeowner" as const,
+      city: h.city ?? "—",
+      memberSince: h.created_at,
+      totalTransacted: payments.filter(p => h.email && p.homeowner_email === h.email).reduce((s, p) => s + p.amount, 0),
+      status: h.is_suspended ? "Suspended" : "Active",
+      raw: h,
+    })),
+    ...workers.map(w => ({
+      id: w.id,
+      name: `${w.first_name} ${w.last_name}`.trim(),
+      email: "—",
+      role: "worker" as const,
+      city: w.city ?? "—",
+      memberSince: w.created_at,
+      totalTransacted: payments.filter(p => p.worker_id === w.id && p.status === "released").reduce((s, p) => s + (p.amount - p.platform_fee), 0),
+      status: w.is_suspended ? "Suspended" : w.is_verified ? "Verified" : "Active",
+      raw: w,
+    })),
+  ].sort((a, b) => new Date(b.memberSince).getTime() - new Date(a.memberSince).getTime());
+
+  const filtered = allUsers.filter(u => {
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.city.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2 className="font-serif font-bold text-2xl" style={{ color: "#1B2E4B" }}>All Users ({allUsers.length})</h2>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg overflow-hidden border border-border text-sm font-semibold">
+            {(["all","homeowner","worker"] as const).map(r => (
+              <button key={r} onClick={() => setRoleFilter(r)}
+                className={`px-3 py-1.5 transition-colors ${roleFilter === r ? "text-white" : "text-muted-foreground hover:bg-muted/50"}`}
+                style={roleFilter === r ? { background: "#1B2E4B" } : {}}>
+                {r === "all" ? "All" : r === "homeowner" ? "Homeowners 🏠" : "Workers 🔨"}
+              </button>
+            ))}
+          </div>
+          <input
+            className="border border-border rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Search…"
+            value={search} onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                {["Name","Email","Role","City","Member Since","Total Transacted","Status","Actions"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">No users found.</td></tr>
+              ) : filtered.map(u => (
+                <tr key={`${u.role}-${u.id}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3">
+                    {u.role === "homeowner" ? (
+                      <button onClick={() => onSelectHomeowner(u.raw as HomeownerProfile)} className="font-semibold text-primary hover:underline">{u.name}</button>
+                    ) : (
+                      <span className="font-semibold">{u.name}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${u.role === "homeowner" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200"}`}>
+                      {u.role === "homeowner" ? "🏠 Homeowner" : "🔨 Worker"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.city}</td>
+                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{new Date(u.memberSince).toLocaleDateString("en-ZA")}</td>
+                  <td className="px-4 py-3 font-semibold">R{u.totalTransacted.toLocaleString("en-ZA")}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                      u.status === "Suspended" ? "bg-red-50 text-red-700 border-red-200" :
+                      u.status === "Verified"  ? "bg-green-50 text-green-700 border-green-200" :
+                      "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}>{u.status}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {u.role === "homeowner" && (
+                        <>
+                          <button onClick={() => onSelectHomeowner(u.raw as HomeownerProfile)} className="text-xs font-bold px-2 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">View</button>
+                          <button onClick={() => onSuspendHomeowner(u.id, u.status !== "Suspended")}
+                            className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${u.status === "Suspended" ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
+                            {u.status === "Suspended" ? "Restore" : "Suspend"}
+                          </button>
+                          <button onClick={() => onRemoveHomeowner(u.id)} className="text-xs font-bold px-2 py-1 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
